@@ -1,0 +1,72 @@
+{
+  "name": "vst-backend",
+  "version": "1.0.0",
+  "description": "Virtual Shelf Testing Backend with Bun, PostgreSQL, and Prisma",
+  "type": "module",
+  "main": "src/server.ts",
+  "scripts": {
+    "dev": "bun run --watch src/server.ts",
+    "build": "bun build src/server.ts --outdir dist --target node",
+    "start": "bun run dist/server.js",
+    
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "prisma:db:push": "prisma db push",
+    "prisma:db:seed": "bun run prisma/seed.ts",
+    "prisma:reset": "prisma migrate reset",
+    
+    "docker:up": "docker-compose --env-file .env.docker up",
+    "docker:up:detached": "docker-compose --env-file .env.docker up -d",
+    "docker:down": "docker-compose down",
+    "docker:down:volumes": "docker-compose down -v",
+    "docker:logs": "docker-compose logs -f",
+    "docker:logs:app": "docker-compose logs -f app",
+    "docker:logs:db": "docker-compose logs -f postgres",
+    "docker:build": "docker-compose build",
+    "docker:restart": "docker-compose restart",
+    "docker:ps": "docker-compose ps",
+    "docker:exec:app": "docker-compose exec app sh",
+    "docker:exec:db": "docker-compose exec postgres psql -U vstadmin -d vst_database",
+    
+    "lint": "bunx @biomejs/biome lint --apply .",
+    "format": "bunx @biomejs/biome format --write .",
+    "type-check": "bunx tsc --noEmit",
+    "test": "bun test"
+  },
+  "keywords": ["vst", "ab-testing", "analytics", "postgresql", "bun", "prisma"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^5.0.0",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^10.0.0",
+    "zod": "^3.22.2"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.7.2",
+    "@types/cors": "^2.8.13",
+    "@types/express": "^4.17.17",
+    "@types/helmet": "^4.0.0",
+    "@types/jsonwebtoken": "^9.0.2",
+    "@types/node": "^20.4.5",
+    "@types/uuid": "^10.0.0",
+    "prisma": "^5.0.0",
+    "typescript": "^5.1.6"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "prisma": {
+    "seed": "bun run prisma/seed.ts"
+  }
+}

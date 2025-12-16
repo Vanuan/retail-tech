@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: vst_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vstadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vstpassword123}
+      POSTGRES_DB: ${POSTGRES_DB:-vst_database}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - vst-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vstadmin} -d ${POSTGRES_DB:-vst_database}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: vst_backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vstadmin}:${POSTGRES_PASSWORD:-vstpassword123}@postgres:5432/${POSTGRES_DB:-vst_database}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-your-dev-secret-key-change-in-production}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      PORT: 3000
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - vst-network
+
+volumes:
+  postgres_data:
+
+networks:
+  vst-network:
+    driver: bridge

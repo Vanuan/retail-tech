@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: vstadmin
+      POSTGRES_PASSWORD: vstpassword123
+      POSTGRES_DB: vst_database
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://vstadmin:vstpassword123@postgres:5432/vst_database?schema=public
+      JWT_SECRET: dev-secret
+      NODE_ENV: development
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:

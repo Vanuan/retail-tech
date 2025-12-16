@@ -1,3 +1,4 @@
+// Base Product interface
 export interface Product {
   id: string;
   name: string;
@@ -11,6 +12,7 @@ export interface Product {
   metadata?: Record<string, any>;
 }
 
+// Test Configuration interface
 export interface TestConfig {
   id: string;
   name: string;
@@ -27,6 +29,7 @@ export interface TestConfig {
   status: 'draft' | 'active' | 'completed';
 }
 
+// User Behavior tracking
 export interface UserBehavior {
   userId: string;
   sessionId: string;
@@ -40,6 +43,7 @@ export interface UserBehavior {
   };
 }
 
+// Interaction events
 export interface InteractionEvent {
   type: 'click' | 'hover' | 'scroll' | 'purchase' | 'view' | 'add_to_cart';
   productId: string;
@@ -49,6 +53,7 @@ export interface InteractionEvent {
   metadata?: Record<string, any>;
 }
 
+// Test results
 export interface TestResult {
   testId: string;
   purchaseRate: number;
@@ -60,6 +65,7 @@ export interface TestResult {
   recommendations?: string[];
 }
 
+// Heatmap data point
 export interface HeatmapPoint {
   x: number;
   y: number;
@@ -67,6 +73,7 @@ export interface HeatmapPoint {
   intensity: number;
 }
 
+// Funnel step
 export interface FunnelStep {
   step: string;
   count: number;
@@ -74,10 +81,20 @@ export interface FunnelStep {
   dropoff?: number;
 }
 
+// Dashboard metrics
 export interface DashboardMetrics {
   totalTests: number;
   activeTests: number;
   totalParticipants: number;
   averageCompletionRate: number;
   topPerformingTest?: string;
+}
+
+// Optional: Type guards
+export function isProduct(obj: any): obj is Product {
+  return obj && typeof obj === 'object' && 'id' in obj && 'name' in obj && 'price' in obj;
+}
+
+export function isTestConfig(obj: any): obj is TestConfig {
+  return obj && typeof obj === 'object' && 'id' in obj && 'name' in obj && 'shelfLayout' in obj;
 }

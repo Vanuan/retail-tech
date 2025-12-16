@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  tests Test[]
+  
+  @@map("users")
+}
+
+model Test {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  status      TestStatus @default(ACTIVE)
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  interactions Interaction[]
+  variants     Variant[]
+  
+  @@map("tests")
+  @@index([userId])
+  @@index([status])
+}
+
+model Variant {
+  id          String   @id @default(uuid())
+  testId      String
+  name        String
+  identifier  String   // e.g., "variant-a", "control"
+  config      Json     // JSON configuration for the variant
+  weight      Float    @default(1.0) // For A/B/n testing distribution
+  isControl   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  test        Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  interactions Interaction[]
+  
+  @@map("variants")
+  @@index([testId])
+  @@unique([testId, identifier])
+}
+
+model Interaction {
+  id          String   @id @default(uuid())
+  testId      String
+  variantId   String?
+  sessionId   String
+  userId      String?  // Optional - logged in user
+  anonymousId String   // Required - session/tracking ID
+  
+  type        InteractionType
+  elementId   String?
+  elementType String?
+  metadata    Json?    // Additional interaction data
+  timestamp   DateTime @default(now())
+  
+  test        Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  variant     Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  
+  @@map("interactions")
+  @@index([testId, timestamp])
+  @@index([sessionId])
+  @@index([anonymousId])
+  @@index([userId])
+  @@index([type])
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  ANALYST
+}
+
+enum TestStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum InteractionType {
+  CLICK
+  VIEW
+  HOVER
+  SCROLL
+  ADD_TO_CART
+  PURCHASE
+  PAGEVIEW
+  SESSION_START
+  SESSION_END
+  IMPRESSION
+  CONVERSION
+}
