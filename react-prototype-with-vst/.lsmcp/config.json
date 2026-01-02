@@ -1,0 +1,4 @@
+{
+  "preset": "tsgo",
+  "files": ["**/*.{ts,tsx,js,jsx,mjs,mts}"]
+}

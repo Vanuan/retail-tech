@@ -1,0 +1,36 @@
+{
+  "name": "@vst/library",
+  "version": "1.0.0",
+  "description": "Core logic for Virtual Store Technology (VST) Planogram Rendering",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "module": "./dist/index.mjs",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "planogram",
+    "retail",
+    "rendering",
+    "vst",
+    "data-access"
+  ],
+  "author": "VST Interview Team",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "zod": "^4.2.1"
+  }
+}
