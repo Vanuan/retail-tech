@@ -5,7 +5,7 @@ import {
   IFixtureRepository,
   IPlacementModelRegistry,
   IProductRepository,
-} from "../types";
+} from "../types/index";
 import { ProductInstanceGenerator } from "./ProductInstanceGenerator";
 import { CorePerspectiveScaler } from "./CorePerspectiveScaler";
 import { CoreZLayerManager } from "./CoreZLayerManager";

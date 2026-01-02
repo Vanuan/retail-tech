@@ -2,9 +2,9 @@
   "name": "@vst/types",
   "version": "1.0.0",
   "description": "Core domain types and data contracts for VST (Virtual Store Technology)",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "module": "./dist/index.mjs",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "module": "./index.ts",
   "files": [
     "dist",
     "README.md"

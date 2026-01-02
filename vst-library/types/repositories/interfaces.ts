@@ -10,6 +10,7 @@ export interface IProductRepository {
   getBySku(sku: string): Promise<ProductMetadata | null>;
   getByCategory(category: string): Promise<ProductMetadata[]>;
   save(metadata: ProductMetadata): Promise<void>;
+  listAll(): Promise<ProductMetadata[]>;
 }
 
 export interface IFixtureRepository {
@@ -21,6 +22,7 @@ export interface IFixtureRepository {
 export interface IPlanogramRepository {
   getById(id: string): Promise<PlanogramConfig | null>;
   listAllIds(): Promise<string[]>;
+  listAll(): Promise<PlanogramConfig[]>;
   save(id: string, config: PlanogramConfig): Promise<void>;
   delete(id: string): Promise<boolean>;
 }

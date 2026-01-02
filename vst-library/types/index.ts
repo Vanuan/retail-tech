@@ -111,6 +111,16 @@ export {
 } from "./repositories/facade";
 
 // ============================================================================
+// VALIDATION - Quality assurance
+// ============================================================================
+
+export {
+  ValidationResult,
+  ValidationError,
+  ValidationWarning,
+} from "./validation";
+
+// ============================================================================
 // RENDERING - Drawing engine contracts
 // ============================================================================
 
@@ -120,7 +130,12 @@ export {
   RenderContextType,
   RenderEngineConfig,
   RenderResult,
+  ProcessedPlanogram,
 } from "./rendering/engine";
+
+export type {
+  RenderInstance,
+} from "./rendering/instance";
 
 export {
   // Subsystem interfaces
@@ -147,6 +162,27 @@ export {
   MaskProperties,
   DepthCategory,
 } from "./rendering/properties";
+
+// ============================================================================
+// SESSION & STATE MANAGEMENT - Flux architecture
+// ============================================================================
+
+export {
+  PlanogramAction,
+  MoveProductAction,
+  AddProductAction,
+  RemoveProductAction,
+  UpdateFacingsAction,
+  UpdateFixtureAction,
+} from "./intent/actions";
+
+export {
+  PlanogramSnapshot,
+} from "./snapshot/state";
+
+export {
+  IPlanogramProjector,
+} from "./projection/contract";
 
 // ============================================================================
 // CONVENIENCE - Helper functions

@@ -1,12 +1,14 @@
-import { ProcessedPlanogram, FixtureConfig, RenderInstance } from "../types";
 import {
+  ProcessedPlanogram,
+  FixtureConfig,
+  RenderInstance,
   Viewport,
   EditingState,
   RenderResult,
   RenderContextType,
   IVisualOrchestration,
   ISpriteExecution,
-} from "../types/renderer";
+} from "../types/index";
 import { RenderEngine } from "./RenderEngine";
 import { VisualOrchestrationSubsystem } from "./orchestration/VisualOrchestrationSubsystem";
 import { SpriteExecutionSubsystem } from "./execution/SpriteExecutionSubsystem";

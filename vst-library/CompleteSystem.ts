@@ -2,8 +2,10 @@ import {
   PlanogramConfig,
   ProcessedPlanogram,
   IDataAccessLayer,
+  Viewport,
+  RenderResult,
+  EditingState,
 } from "./types/index";
-import { Viewport, RenderResult, EditingState } from "./types/renderer";
 import { CoreLayerProcessor } from "./core-processing/CoreLayerProcessor";
 import { DataAccessLayer } from "./data-access";
 import { AtlasBuilder } from "./atlas-processing";

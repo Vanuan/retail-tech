@@ -12,7 +12,7 @@ export const AddProductRequestSchema = z.object({
   sku: z.string(),
   position: z.discriminatedUnion("model", [
     ShelfPositionSchema,
-    // PegboardSchema, etc.
+    // Future expansion: PegboardSchema, Freeform3DSchema, etc.
   ]),
 });
 

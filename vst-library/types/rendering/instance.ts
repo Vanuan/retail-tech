@@ -10,7 +10,12 @@ import { SemanticPosition } from "../coordinates/semantic";
 import { SourceProduct, FixtureConfig, ProductMetadata } from "../planogram";
 import { FacingConfig, PyramidConfig } from "../planogram/placement";
 import { IPlacementModel } from "../placement-models/interface";
-import { ShadowProperties, MaskProperties, ZLayerProperties, DepthCategory } from "./properties";
+import {
+  ShadowProperties,
+  MaskProperties,
+  ZLayerProperties,
+  DepthCategory,
+} from "./properties";
 
 /**
  * RenderInstance
@@ -20,11 +25,11 @@ export interface RenderInstance {
   /** Unique identifier */
   id: string;
   sku: string;
-  
+
   /** Original L1 source data */
   sourceData: SourceProduct;
   fixture: FixtureConfig;
-  
+
   /** Resolved strategy and metadata */
   placementModel: IPlacementModel;
   metadata: ProductMetadata;
@@ -33,17 +38,36 @@ export interface RenderInstance {
   physicalDimensions: Dimensions3D;
   visualDimensions: VisualDimensions;
   anchorPoint: Vector2;
-  
+
   /** Positioning */
   semanticCoordinates: SemanticPosition;
   facingData: FacingConfig | null;
   pyramidData: PyramidConfig | null;
   expansionOffset?: Vector3;
 
+  /**
+   * WORLD SPACE (Retail Truth)
+   * Units: Millimeters. Position is relative to Fixture Origin (0,0,0)
+   */
+  worldPosition: Vector3;
+  worldRotation: Vector3; // Euler angles
+  worldDimensions: Dimensions3D;
+
   /** Scaling logic */
   depthRatio: number;
   renderScale: number;
   scaledDimensions: Dimensions3D;
+
+  /**
+   * VISUAL HINTS
+   * Context-agnostic descriptions of how it should look.
+   */
+  depthCategory: DepthCategory;
+  zIndexComponents: {
+    shelf: number;
+    facing: number;
+    depth: number;
+  };
 
   /** Visual state */
   visualProperties: {
@@ -57,10 +81,13 @@ export interface RenderInstance {
   zIndex: number;
   zLayerProperties: ZLayerProperties;
 
-  /** Screen-space coordinates */
-  renderCoordinates: RenderCoordinates;
-  renderBounds: RenderBounds;
-  collisionBounds: RenderBounds;
+  /**
+   * RENDERING CONTEXT DATA (L5)
+   * These are now optional as they are calculated by the specific engine.
+   */
+  renderCoordinates?: RenderCoordinates;
+  renderBounds?: RenderBounds;
+  collisionBounds?: RenderBounds;
 
   /** Visual effects */
   shadowProperties: ShadowProperties;

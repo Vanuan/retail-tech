@@ -1,6 +1,12 @@
 import { RendererLayer } from "../RendererLayer";
-import { RenderInstance, FixtureConfig } from "../../types/index";
-import { Viewport, EditingState, RenderResult, ProcessedPlanogram } from "../../types/renderer";
+import {
+  RenderInstance,
+  FixtureConfig,
+  Viewport,
+  EditingState,
+  RenderResult,
+  ProcessedPlanogram,
+} from "../../types/index";
 
 /**
  * PUBLISHER RENDERER

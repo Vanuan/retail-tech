@@ -1,10 +1,20 @@
 import {
-  SemanticCoordinates,
+  SemanticPosition,
   FixtureConfig,
+  Vector2,
   Vector3,
+  Dimensions3D,
   IPlacementModel,
   IPlacementModelRegistry,
+  ExpansionIdentifier,
+  isShelfSurfacePosition,
+  isPegboardGridPosition,
+  isFreeform3DPosition,
+  createShelfSurfacePosition,
+  createPegboardGridPosition,
+  createFreeform3DPosition,
 } from "../types";
+import { ShelfSurfacePlacementModel } from "./placement-models/ShelfSurfacePlacementModel";
 
 /**
  * PLACEMENT MODEL REPOSITORY
@@ -27,111 +37,78 @@ export class PlacementModelRegistry implements IPlacementModelRegistry {
    * Pre-loads standard retail placement models.
    */
   private initializeDefaultModels(): void {
-    // Standard Shelf Model: Calculates positions based on shelf levels and facing indices.
-    this.models.set("shelf-linear", {
-      id: "shelf-linear",
-      name: "Standard Shelf Model",
-      transform: (
-        coordinates: SemanticCoordinates,
-        fixtureConfig: FixtureConfig,
-      ): Vector3 => {
-        const {
-          x: absoluteX,
-          shelfIndex = 0,
-          facing = 1,
-          depth = 0,
-        } = coordinates;
-        const { width } = fixtureConfig.dimensions;
+    // ========================================================================
+    // SHELF SURFACE MODEL
+    // ========================================================================
+    this.register(new ShelfSurfacePlacementModel());
 
-        // Prioritize absolute X coordinate (retail truth in mm) if provided.
-        // Fallback to logical facing calculation if X is missing.
-        const x =
-          absoluteX !== undefined ? absoluteX : (facing - 1) * (width / 5);
-        const y = shelfIndex * 200; // Assume 200mm vertical spacing as default
-        const z = depth;
+    // ========================================================================
+    // PEGBOARD / GRID MODEL
+    // ========================================================================
+    this.models.set("pegboard-grid", {
+      id: "pegboard-grid",
+      name: "Pegboard / Slatwall",
+      properties: {
+        supportsFacings: false, // Grid positions usually imply specific slots
+        supportsShelves: false,
+      },
+      transform: (
+        pos: SemanticPosition,
+        fixture: FixtureConfig,
+        productDims: Dimensions3D,
+        anchor: Vector2,
+        identifier?: ExpansionIdentifier,
+      ): Vector3 => {
+        if (!isPegboardGridPosition(pos)) return { x: 0, y: 0, z: 0 };
+
+        const spacing = pos.gridSpacing || 25.4;
+
+        // Calculate absolute position based on grid indices
+        const x = pos.holeX * spacing;
+        const y = pos.holeY * spacing;
+        const z = 0; // Pegboard items are usually flush or have hook offsets handled by sprite anchor
 
         return { x, y, z };
       },
-      properties: {
-        supportsFacings: true,
-        supportsShelves: true,
+      project: (
+        worldPos: Vector3,
+        fixture: FixtureConfig,
+      ): SemanticPosition => {
+        const spacing = 25.4;
+        return createPegboardGridPosition({
+          holeX: Math.round(worldPos.x / spacing),
+          holeY: Math.round(worldPos.y / spacing),
+        });
       },
     });
 
-    // Hole Grid Model: Used for Pegboards and Slatwalls.
-    this.models.set("hole-grid", {
-      id: "hole-grid",
-      name: "Hole Grid Model",
-      transform: (
-        coordinates: SemanticCoordinates,
-        fixtureConfig: FixtureConfig,
-      ): Vector3 => {
-        const {
-          x: absoluteX,
-          y: absoluteY,
-          holeX = 0,
-          holeY = 0,
-          depth = 0,
-        } = coordinates;
-        const spacingX = fixtureConfig.config?.holeSpacingX || 25.4;
-        const spacingY = fixtureConfig.config?.holeSpacingY || 25.4;
-
-        // Prioritize absolute coordinates (retail truth) if available.
-        const x = absoluteX !== undefined ? absoluteX : holeX * spacingX;
-        const y = absoluteY !== undefined ? absoluteY : holeY * spacingY;
-        const z = depth;
-
-        return { x, y, z };
-      },
+    // ========================================================================
+    // FREEFORM 3D MODEL
+    // ========================================================================
+    this.models.set("freeform-3d", {
+      id: "freeform-3d",
+      name: "Freeform 3D Placement",
       properties: {
         supportsFacings: false,
         supportsShelves: false,
       },
-    });
-
-    // Grid Model: Used for coolers and structured fixtures.
-    this.models.set("grid", {
-      id: "grid",
-      name: "Standard Grid Model",
       transform: (
-        coordinates: SemanticCoordinates,
-        fixtureConfig: FixtureConfig,
+        pos: SemanticPosition,
+        fixture: FixtureConfig,
+        productDims: Dimensions3D,
+        anchor: Vector2,
+        identifier?: ExpansionIdentifier,
       ): Vector3 => {
-        const {
-          x: absoluteX,
-          y: absoluteY,
-          shelfIndex = 0,
-          depth = 0,
-        } = coordinates;
-
-        // In grid models, products are often placed with absolute mm X
-        // Y is either absolute or derived from shelfIndex.
-        const x = absoluteX !== undefined ? absoluteX : 0;
-        const y = absoluteY !== undefined ? absoluteY : shelfIndex * 333; // Approx 333mm shelf height for coolers
-        const z = depth;
-
-        return { x, y, z };
+        if (!isFreeform3DPosition(pos)) return { x: 0, y: 0, z: 0 };
+        return { ...pos.position };
       },
-      properties: {
-        supportsFacings: true,
-        supportsShelves: true,
-      },
-    });
-
-    // Free-form Model: Used for floor stacks or custom placements.
-    this.models.set("free-form", {
-      id: "free-form",
-      name: "Free-form Model",
-      transform: (
-        coordinates: SemanticCoordinates,
-        fixtureConfig: FixtureConfig,
-      ): Vector3 => {
-        const { x = 0, y = 0, z = 0 } = coordinates;
-        return { x, y, z };
-      },
-      properties: {
-        supportsFacings: false,
-        supportsShelves: false,
+      project: (
+        worldPos: Vector3,
+        fixture: FixtureConfig,
+      ): SemanticPosition => {
+        return createFreeform3DPosition({
+          position: worldPos,
+        });
       },
     });
   }

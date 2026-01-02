@@ -1,6 +1,12 @@
 import { RendererLayer } from "../RendererLayer";
-import { RenderInstance, FixtureConfig } from "../../types/index";
-import { Viewport, EditingState, ProcessedPlanogram, RenderResult } from "../../types/renderer";
+import {
+  RenderInstance,
+  FixtureConfig,
+  Viewport,
+  EditingState,
+  ProcessedPlanogram,
+  RenderResult,
+} from "../../types/index";
 
 /**
  * VSE RENDERER (Virtual Store Engine)

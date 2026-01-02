@@ -16,15 +16,19 @@ npm install @vst/types
 import { PlanogramConfig, createShelfSurfacePosition } from '@vst/types';
 
 const planogram: PlanogramConfig = {
+  id: 'demo-plano',
+  name: 'Demo Planogram',
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
   fixture: {
     type: 'gondola',
     placementModel: 'shelf-surface',
     dimensions: { width: 1200, height: 1800, depth: 400 },
     config: {
       shelves: [
-        { index: 0, baseHeight: 100, width: 1200, depth: 400 },
-        { index: 1, baseHeight: 500, width: 1200, depth: 400 },
-        { index: 2, baseHeight: 900, width: 1200, depth: 400 }
+        { id: 'shelf-1', index: 0, baseHeight: 100 },
+        { id: 'shelf-2', index: 1, baseHeight: 500 },
+        { id: 'shelf-3', index: 2, baseHeight: 900 }
       ],
       depthSpacing: 300
     }
@@ -45,10 +49,11 @@ const planogram: PlanogramConfig = {
 ### Processing for Display (L1 → L4)
 
 ```typescript
-import { CoreProcessor } from '@vst/core'; // Implementation
+import { CoreProcessor } from '../core-processing/CoreProcessor'; // Implementation
 import { ProcessedPlanogram } from '@vst/types';
+import { dal } from '../data-access';
 
-const processor = new CoreProcessor();
+const processor = new CoreProcessor(dal);
 const processed: ProcessedPlanogram = await processor.process(planogram);
 ```
 
@@ -87,7 +92,7 @@ Translation strategies that convert "Retail Truth" (Semantic) into "Physical Tru
 ### "Which lifecycle type do I need?"
 - **I'm building an API endpoint to save planograms.** → `PlanogramConfig` (L1).
 - **I'm writing a validation rule.** → `ValidationResult` (L2).
-- **I'm fetching product details.** → `EnrichedProduct` (L3).
+- **I'm fetching product details.** → `ProductMetadata` (L3).
 - **I'm rendering the canvas.** → `RenderInstance` (L4).
 
 ### "Which placement model should I use?"
@@ -100,9 +105,9 @@ Translation strategies that convert "Retail Truth" (Semantic) into "Physical Tru
 
 ### Example 1: Backend - Store a Planogram
 ```typescript
-import { Backend } from '@vst/types';
+import { PlanogramConfig } from '@vst/types';
 
-async function savePlanogram(id: string, config: Backend.PlanogramConfig) {
+async function savePlanogram(id: string, config: PlanogramConfig) {
   // Backend only needs L1 types
   await db.planograms.set(id, {
     id,
@@ -114,48 +119,34 @@ async function savePlanogram(id: string, config: Backend.PlanogramConfig) {
 
 ### Example 2: Core Processor - Transform L1 → L4
 ```typescript
-import { Processor } from '@vst/types';
+import { PlanogramConfig, ProcessedPlanogram } from '@vst/types';
+import { CoreProcessor } from '../core-processing/CoreProcessor';
 
-async function processPlanogram(config: Processor.PlanogramConfig): Promise<Processor.ProcessedPlanogram> {
-  const processor = new CoreProcessor(); // Implementation
+async function processPlanogram(config: PlanogramConfig): Promise<ProcessedPlanogram> {
+  const processor = new CoreProcessor(dal);
   // Returns fully calculated L4 instances
-  return await processor.execute(config);
+  return await processor.process(config);
 }
 ```
 
 ### Example 3: Renderer - Draw to Canvas
 ```typescript
-import { Renderer } from '@vst/types';
+import { RenderInstance } from '@vst/types';
 
-function renderFrame(context: CanvasRenderingContext2D, instances: Renderer.RenderInstance[]) {
+function renderFrame(context: CanvasRenderingContext2D, instances: RenderInstance[]) {
   // Sort by calculated Z-index
   const sorted = instances.sort((a, b) => a.zIndex - b.zIndex);
 
   for (const instance of sorted) {
+    if (!instance.renderCoordinates) continue;
+    
     const { x, y, width, height } = instance.renderCoordinates;
     const sprite = instance.assets.spriteVariants[0];
     
     // Renderer is "dumb" - just draws what it's told
-    context.drawImage(sprite.image, x, y, width, height);
+    // (Pseudocode for image drawing)
+    // context.drawImage(sprite.image, x, y, width, height);
   }
-}
-```
-
-### Example 4: UI Editor - Handle User Interaction
-```typescript
-import { Editor } from '@vst/types';
-
-function handleDrag(
-  instance: Editor.RenderInstance, 
-  deltaX: number
-): Editor.ValidationResult {
-  // UI needs to understand both Render (interaction) and Semantic (logic) types
-  const newX = instance.semanticCoordinates.x + deltaX;
-  
-  // Validate against business rules
-  if (newX < 0) return { valid: false, errors: ['Off shelf'] };
-  
-  return { valid: true, errors: [] };
 }
 ```
 
@@ -174,6 +165,8 @@ type SemanticPosition =
 The root input object.
 ```typescript
 interface PlanogramConfig {
+  id: string;
+  name: string;
   fixture: FixtureConfig;
   products: SourceProduct[];
 }
@@ -184,10 +177,19 @@ The final output object.
 ```typescript
 interface RenderInstance {
   id: string;
-  renderCoordinates: RenderCoordinates; // Pixels
+  
+  // World Space (Physical)
+  worldPosition: Vector3;
+  worldDimensions: Dimensions3D;
+  
+  // Screen Space (Visual)
+  renderCoordinates?: RenderCoordinates; 
   zIndex: number;
-  assets: { sprite: string; mask: string };
-  // ... plus original source data
+  
+  assets: { 
+    spriteVariants: Array<{ url: string }>;
+    maskUrl: string | null 
+  };
 }
 ```
 
@@ -212,23 +214,16 @@ const physicalWidth: Millimeters = screenWidth;
 3.  **Explicit Over Implicit**: "Magic numbers" are replaced by explicit semantic fields (`shelfIndex`, `depth`).
 4.  **Portability**: The core logic is pure TypeScript, runnable in Node.js (Backend), Browser (UI), or Web Worker (Processor).
 
-## 📚 Documentation Links
-
-- [CONCEPTS.md](./CONCEPTS.md) - Deep dive into coordinate systems.
-- [GLOSSARY.md](./GLOSSARY.md) - Definitions of terms.
-- [coordinates/README.md](./coordinates/README.md) - Coordinate system details.
-- [placement-models/README.md](./placement-models/README.md) - How to choose a model.
-
 ## 🗂️ Package Structure
 
 ```
 vst-library/types/
 ├── core/               # Units (mm, px) and geometry primitives
 ├── coordinates/        # Semantic positions and render coordinates
-├── planogram/          # Business domain (products, fixtures, config)
-├── lifecycle/          # L1-L4 pipeline stage definitions
-├── rendering/          # Renderer layer contracts and instances
+├── planogram/          # Business domain (config, products, placement, schemas)
+├── rendering/          # Renderer contracts (engine, instance, properties)
 ├── placement-models/   # Translation strategy interfaces
-├── repositories/       # Data access and persistence interfaces
-└── exports/            # Consumer-specific bundles
+├── repositories/       # Data access interfaces
+├── validation/         # Validation results and error codes
+└── api/                # Wire types for network transport
 ```
