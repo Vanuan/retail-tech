@@ -6,6 +6,7 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
 } from "react";
 import { usePlanogramData } from "./planogram-data-context";
@@ -22,6 +23,8 @@ import {
 } from "./vst/types";
 
 export type { RenderInstance };
+import { SessionStore, CoreProjector, usePlanogramSession } from "@vst/session";
+import { CoreProcessor } from "./vst/implementations/core/processor";
 import { dal } from "./vst/implementations/repositories/data-access";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
@@ -69,17 +72,34 @@ interface PlanogramEditorContextType {
   ) => number;
 
   // Actions
-  addProduct: (product: SourceProduct) => void;
-  removeProduct: (productId: string) => void;
-  updateProduct: (product: SourceProduct) => void;
+  addProduct: (product: SourceProduct) => Promise<void>;
+  removeProduct: (productId: string) => Promise<void>;
+  updateProduct: (
+    id: string,
+    updates: Partial<SourceProduct>,
+    silent?: boolean,
+  ) => Promise<void>;
   selectProduct: (productId: string | null) => void;
 
   addShelf: () => void;
   removeShelf: (shelfIndex: number) => void;
-  updateShelf: (shelfIndex: number, updates: Partial<ShelfConfig>) => void;
+  updateShelf: (shelfIndex: number, updates: Partial<ShelfConfig>) => Promise<void>;
   reindexShelves: (shelves: ShelfConfig[]) => ShelfConfig[];
 
+  // Data State
+  renderInstances: RenderInstance[];
+  snapshot: any;
+
+  // Session Actions
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
+  canUndo: boolean;
+  canRedo: boolean;
+  isProjecting: boolean;
+
   // Meta/File Operations
+  savePlanogram: () => Promise<void>;
+  commit: () => Promise<void>;
   savedPlanograms: PlanogramConfig[];
   refreshSavedPlanograms: () => Promise<void>;
   createNewPlanogram: () => Promise<void>;
@@ -172,16 +192,19 @@ export function usePlanogram() {
       facings: number,
       excludeProductId?: string,
     ) => {
+      const pos = { ...position };
+      if (!pos.model) pos.model = "shelf-surface";
+
       // Construct a dummy product for validation
       const product: SourceProduct = {
         id: excludeProductId || "temp",
         sku,
         placement: {
-          position,
+          position: pos,
           facings: createFacingConfig(facings, 1),
         },
       };
-      return editor.validatePlacement(product, position, excludeProductId);
+      return editor.validatePlacement(product, pos, excludeProductId);
     },
     [editor],
   );
@@ -189,9 +212,11 @@ export function usePlanogram() {
   const findNextAvailablePosition = useCallback(
     (sku: string, shelfIndex?: number) => {
       const meta = data.metadata.get(sku);
-      if (!meta) return { shelfIndex: 0, x: 0, depth: 0 }; // Fallback
+      if (!meta)
+        return { model: "shelf-surface", shelfIndex: 0, x: 0, depth: 0 }; // Fallback
       return (
         editor.findNextAvailablePosition(meta, shelfIndex) || {
+          model: "shelf-surface",
           shelfIndex: 0,
           x: 0,
           depth: 0,
@@ -202,16 +227,35 @@ export function usePlanogram() {
   );
 
   const addProduct = useCallback(
-    (sku: string, position?: any) => {
+    async (sku: string, position?: any) => {
       const meta = data.metadata.get(sku);
       if (!meta) return;
 
-      let finalPos = position;
-      if (!finalPos) {
-        finalPos = editor.findNextAvailablePosition(
+      let finalPos = { ...position };
+      if (!position || position.x === undefined) {
+        const autoPos = editor.findNextAvailablePosition(
           meta,
-          editor.selectedShelf?.index,
-        ) || { shelfIndex: 0, x: 0, depth: 0 };
+          position?.shelfIndex ?? editor.selectedShelf?.index,
+        );
+        if (autoPos) {
+          finalPos = { ...finalPos, ...autoPos };
+        } else {
+          finalPos = {
+            model: "shelf-surface",
+            shelfIndex: position?.shelfIndex ?? 0,
+            x: 0,
+            depth: 0,
+            ...finalPos,
+          };
+        }
+      }
+      if (!finalPos.model) finalPos.model = "shelf-surface";
+
+      // Check validation before adding
+      const validation = validatePlacement(sku, finalPos, 1);
+      if (!validation.valid) {
+        toast.error(`Cannot add product: ${validation.error}`);
+        return;
       }
 
       const newProduct: SourceProduct = {
@@ -225,23 +269,21 @@ export function usePlanogram() {
           facings: createFacingConfig(1, 1),
         },
       };
-      editor.addProduct(newProduct);
+      await editor.addProduct(newProduct);
     },
-    [editor, data.metadata],
+    [data.metadata, findNextAvailablePosition, validatePlacement, editor],
   );
 
   const updateProduct = useCallback(
-    (id: string, updates: Partial<SourceProduct>, silent?: boolean) => {
-      const p = products.find((p) => p.id === id);
-      if (!p) return;
-      editor.updateProduct({ ...p, ...updates });
+    async (id: string, updates: Partial<SourceProduct>, silent?: boolean) => {
+      await editor.updateProduct(id, updates, silent);
     },
-    [products, editor],
+    [editor.updateProduct],
   );
 
   // Missing methods stubbed or mapped
   const resizeViewport = (w: number, h: number) => {}; // No-op, managed by canvas mostly now
-  const getVisibleInstances = () => data.renderInstances; // simplified
+  const getVisibleInstances = () => editor.renderInstances;
 
   return {
     // Data
@@ -253,7 +295,8 @@ export function usePlanogram() {
     setPlanogramName,
     isLoading: data.isLoading,
     isSaving: data.isSaving,
-    hasUnsavedChanges: data.hasUnsavedChanges,
+    hasUnsavedChanges:
+      data.hasUnsavedChanges || editor.snapshot?.session?.isDirty || false,
     error: data.error ? data.error.message : null,
     savedPlanograms: editor.savedPlanograms,
 
@@ -318,13 +361,21 @@ export function usePlanogram() {
     findNextAvailablePosition,
 
     // Persistence
-    savePlanogram: data.savePlanogram,
+    savePlanogram: editor.savePlanogram,
     loadPlanogram: data.loadPlanogram,
     createNewPlanogram: editor.createNewPlanogram,
     renamePlanogram: editor.renamePlanogram,
 
-    // Direct access
-    getRenderInstances: () => data.renderInstances,
+    undo: editor.undo,
+    redo: editor.redo,
+    canUndo: editor.canUndo,
+    canRedo: editor.canRedo,
+    isProjecting: editor.isProjecting,
+    snapshot: editor.snapshot,
+    validation: editor.snapshot?.validation || null,
+    commit: editor.commit,
+
+    getRenderInstances: () => editor.renderInstances,
   };
 }
 
@@ -333,8 +384,46 @@ export function PlanogramEditorProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { config, metadata, updateConfig, savePlanogram, setConfig } =
+  const { config, metadata, updateConfig, savePlanogram, setConfig, renderInstances: dataRenderInstances } =
     usePlanogramData();
+
+  // --- Session Management ---
+  const [sessionStore, setSessionStore] = useState<SessionStore | null>(null);
+  const processor = useMemo(() => new CoreProcessor(dal), []);
+  const projector = useRef(new CoreProjector(processor, metadata));
+
+  // Keep projector dependencies in sync
+  useEffect(() => {
+    const p = projector.current as any;
+    p.processor = processor;
+    p.metadata = metadata;
+  }, [processor, metadata]);
+
+  // Initialize session store when config is loaded or changed
+  useEffect(() => {
+    if (config) {
+      setSessionStore(new SessionStore(config, projector.current));
+    }
+  }, [config?.id]);
+
+  const {
+    snapshot,
+    dispatch,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    isProjecting,
+  } = usePlanogramSession(sessionStore);
+
+  // Sync session changes back to the data layer for persistence/rendering
+  useEffect(() => {
+    if (snapshot) {
+      setConfig(snapshot.config);
+    }
+  }, [snapshot, setConfig]);
+
+  const renderInstances = snapshot?.renderInstances || dataRenderInstances;
 
   // --- Selection State ---
   const [selectedProductId, setSelectedProductId] = useState<string | null>(
@@ -447,10 +536,16 @@ export function PlanogramEditorProvider({
       products: SourceProduct[],
       ignoreProductId?: string,
     ) => {
-      const productsOnShelf = products.filter((p) => {
+      const activeProducts = snapshot?.config.products || products;
+      const productsOnShelf = activeProducts.filter((p) => {
         if (p.id === ignoreProductId) return false;
         if (!isShelfSurfacePosition(p.placement.position)) return false;
-        return p.placement.position.shelfIndex === shelfIndex;
+        const pos = p.placement.position;
+        return (
+          pos.shelfIndex === shelfIndex &&
+          typeof pos.x === "number" &&
+          !isNaN(pos.x)
+        );
       });
 
       let maxX = 0;
@@ -469,37 +564,44 @@ export function PlanogramEditorProvider({
       });
       return maxX;
     },
-    [metadata],
+    [metadata, snapshot],
   );
 
   const validatePlacement = useCallback(
     (product: SourceProduct, position: any, ignoreProductId?: string) => {
-      if (!config) return { valid: false, error: "No config" };
+      const activeConfig = snapshot?.config || config;
+      if (!activeConfig) return { valid: false, error: "No config" };
 
       // Simple validation for shelf surface
       if (!isShelfSurfacePosition(position)) return { valid: true };
+
+      // Ensure we have valid numbers for coordinates
+      if (typeof position.x !== "number" || isNaN(position.x)) {
+        return { valid: false, error: "Invalid X coordinate" };
+      }
 
       const meta = metadata.get(product.sku);
       if (!meta) return { valid: false, error: "Metadata missing" };
 
       const shelfIndex = position.shelfIndex;
       // Find shelf
-      const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
+      const shelves =
+        (activeConfig.fixture.config.shelves as ShelfConfig[]) || [];
       const shelf = shelves.find((s) => s.index === shelfIndex);
       if (!shelf) return { valid: false, error: "Shelf not found" };
 
-      const startX = position.x;
+      const startX = Math.round(position.x * 1000) / 1000;
       const facings = product.placement.facings?.horizontal || 1;
       const width = meta.dimensions.physical.width * facings;
-      const endX = startX + width;
-      const shelfWidth = config.fixture.dimensions.width;
+      const endX = Math.round((startX + width) * 1000) / 1000;
+      const shelfWidth = activeConfig.fixture.dimensions.width;
 
-      if (startX < 0 || endX > shelfWidth) {
+      if (startX < -0.1 || endX > shelfWidth + 0.1) {
         return { valid: false, error: "Out of bounds" };
       }
 
       // Overlap
-      const collision = config.products.some((p) => {
+      const collision = activeConfig.products.some((p) => {
         if (p.id === product.id || p.id === ignoreProductId) return false;
         if (!isShelfSurfacePosition(p.placement.position)) return false;
         if (p.placement.position.shelfIndex !== shelfIndex) return false;
@@ -509,13 +611,13 @@ export function PlanogramEditorProvider({
         const pMeta = metadata.get(p.sku);
         if (!pMeta) return false;
 
-        const pX = p.placement.position.x;
+        const pX = Math.round(p.placement.position.x * 1000) / 1000;
         const pW =
           pMeta.dimensions.physical.width *
           (p.placement.facings?.horizontal || 1);
-        const pEnd = pX + pW;
+        const pEnd = Math.round((pX + pW) * 1000) / 1000;
 
-        return startX < pEnd && endX > pX;
+        return startX < pEnd - 0.5 && endX > pX + 0.5;
       });
 
       if (collision) {
@@ -524,77 +626,92 @@ export function PlanogramEditorProvider({
 
       return { valid: true, spaceUsed: endX };
     },
-    [config, metadata],
+    [config, metadata, snapshot],
   );
 
   const findNextAvailablePosition = useCallback(
-    (prodMetadata: ProductMetadata, preferredShelfIndex?: number) => {
-      if (!config) return null;
+    (metadata: ProductMetadata, preferredShelfIndex?: number) => {
+      const activeConfig = snapshot?.config || config;
+      if (!activeConfig) return null;
 
-      const rawShelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
-      const shelves = [...rawShelves].sort((a, b) => a.index - b.index);
+      const rawShelves =
+        (activeConfig.fixture.config.shelves as ShelfConfig[]) || [];
+      const shelves = [...rawShelves].sort((a, b) => b.index - a.index);
 
-      // prioritize preferred
+      // Try preferred shelf first
       if (preferredShelfIndex !== undefined) {
         const idx = shelves.findIndex((s) => s.index === preferredShelfIndex);
-        if (idx > 0) {
-          const [s] = shelves.splice(idx, 1);
+        if (idx !== -1) {
+          const s = shelves[idx];
+          shelves.splice(idx, 1);
           shelves.unshift(s);
         }
       }
 
-      const pWidth = prodMetadata.dimensions.physical.width;
-      const shelfWidth = config.fixture.dimensions.width;
+      const pWidth = metadata.dimensions.physical.width;
+      const shelfWidth = activeConfig.fixture.dimensions.width;
 
       for (const shelf of shelves) {
-        const used = getShelfSpaceUsed(shelf.index, config.products);
+        const used = getShelfSpaceUsed(shelf.index, activeConfig.products);
         if (used + pWidth <= shelfWidth) {
-          return { shelfIndex: shelf.index, x: used, depth: 0 };
+          return {
+            model: "shelf-surface" as const,
+            shelfIndex: shelf.index,
+            x: used as any,
+            depth: 0 as any,
+          };
         }
       }
       return null;
     },
-    [config, getShelfSpaceUsed],
+    [config, getShelfSpaceUsed, snapshot],
   );
 
   // --- Mutations ---
 
   const addProduct = useCallback(
-    (product: SourceProduct) => {
-      updateConfig((prev) => ({
-        ...prev,
-        products: [...prev.products, product],
-      }));
-      setSelectedProductId(product.id);
+    async (product: SourceProduct) => {
+      await dispatch({ type: "PRODUCT_ADD", product });
     },
-    [updateConfig],
+    [dispatch],
   );
 
   const removeProduct = useCallback(
-    (id: string) => {
-      updateConfig((prev) => ({
-        ...prev,
-        products: prev.products.filter((p) => p.id !== id),
-      }));
-      if (selectedProductId === id) setSelectedProductId(null);
+    async (productId: string) => {
+      await dispatch({ type: "PRODUCT_REMOVE", productId });
     },
-    [updateConfig, selectedProductId],
+    [dispatch],
   );
 
   const updateProduct = useCallback(
-    (product: SourceProduct) => {
-      updateConfig((prev) => ({
-        ...prev,
-        products: prev.products.map((p) => (p.id === product.id ? product : p)),
-      }));
+    async (id: string, updates: Partial<SourceProduct>, silent?: boolean) => {
+      const method =
+        silent && sessionStore
+          ? sessionStore.dispatchSquashed.bind(sessionStore)
+          : dispatch;
+
+      await method({
+        type: "PRODUCT_UPDATE",
+        productId: id,
+        to: updates.placement?.position,
+        facings: updates.placement?.facings,
+      });
     },
-    [updateConfig],
+    [dispatch, sessionStore],
   );
 
-  const selectProduct = useCallback((id: string | null) => {
-    setSelectedProductId(id);
-    if (id) setSelectedShelf(null);
-  }, []);
+  const selectProduct = useCallback(
+    (id: string | null) => {
+      setSelectedProductId(id);
+      if (id) {
+        setSelectedShelf(null);
+        sessionStore?.setSelection([id]);
+      } else {
+        sessionStore?.setSelection([]);
+      }
+    },
+    [sessionStore],
+  );
 
   const addShelf = useCallback(() => {
     updateConfig((prev) => {
@@ -656,25 +773,21 @@ export function PlanogramEditorProvider({
   );
 
   const updateShelf = useCallback(
-    (index: number, updates: Partial<ShelfConfig>) => {
-      updateConfig((prev) => {
-        const currentShelves =
-          (prev.fixture.config.shelves as ShelfConfig[]) || [];
-        return {
-          ...prev,
-          fixture: {
-            ...prev.fixture,
-            config: {
-              ...prev.fixture.config,
-              shelves: currentShelves.map((s) =>
-                s.index === index ? { ...s, ...updates } : s,
-              ),
-            },
-          },
-        };
+    async (index: number, updates: Partial<ShelfConfig>) => {
+      if (!snapshot) return;
+      const currentShelves =
+        (snapshot.config.fixture.config.shelves as ShelfConfig[]) || [];
+
+      await dispatch({
+        type: "FIXTURE_UPDATE",
+        config: {
+          shelves: currentShelves.map((s) =>
+            s.index === index ? { ...s, ...updates } : s,
+          ),
+        },
       });
     },
-    [updateConfig],
+    [dispatch, snapshot],
   );
 
   const reindexShelves = useCallback((shelves: ShelfConfig[]) => {
@@ -682,6 +795,20 @@ export function PlanogramEditorProvider({
   }, []);
 
   // --- Meta Actions ---
+
+  const commit = useCallback(async () => {
+    if (sessionStore) {
+      await sessionStore.commit();
+    }
+  }, [sessionStore]);
+
+  const wrappedSavePlanogram = useCallback(async () => {
+    // Swapping the order: commit the session history first, then save the resulting config.
+    // This ensures that the data-layer's hasUnsavedChanges flag is correctly reset to false
+    // after the session-sync effect has finished marking it as dirty.
+    await commit();
+    await savePlanogram();
+  }, [savePlanogram, commit]);
 
   const createNewPlanogram = useCallback(async () => {
     // Load 'mock' as template or empty
@@ -755,6 +882,15 @@ export function PlanogramEditorProvider({
     removeShelf,
     updateShelf,
     reindexShelves,
+    renderInstances,
+    snapshot,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    isProjecting,
+    savePlanogram: wrappedSavePlanogram,
+    commit,
     savedPlanograms,
     refreshSavedPlanograms,
     createNewPlanogram,

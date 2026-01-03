@@ -25,6 +25,12 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@vst/types": [
+        "./lib/vst/types/index.ts"
+      ],
+      "@vst/session": [
+        "./lib/vst/session/index.ts"
       ]
     }
   },

@@ -20,6 +20,8 @@ import {
   FilePlus,
   FolderOpen,
   Loader2,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 
 interface ToolbarProps {
@@ -55,6 +57,10 @@ export function Toolbar({
     setPlanogramName,
     savedPlanograms,
     renamePlanogram,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = usePlanogram();
 
   const [isEditingName, setIsEditingName] = useState(false);
@@ -114,6 +120,27 @@ export function Toolbar({
           ({Math.round(getShelfSpaceUsed(selectedShelf))} /{" "}
           {fixture?.dimensions.width}mm)
         </span>
+      </div>
+
+      <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => undo()}
+          disabled={!canUndo}
+          title="Undo (Ctrl+Z)"
+        >
+          <Undo2 className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => redo()}
+          disabled={!canRedo}
+          title="Redo (Ctrl+Y)"
+        >
+          <Redo2 className="h-4 w-4" />
+        </Button>
       </div>
 
       <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1">

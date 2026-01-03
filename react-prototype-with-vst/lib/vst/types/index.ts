@@ -15,7 +15,7 @@ export * from "./core";
 // COORDINATES - Physical and semantic positioning
 // ============================================================================
 
-export type {
+export {
   // Semantic coordinate types
   SemanticPosition,
   ShelfSurfacePosition,
@@ -28,7 +28,7 @@ export type {
   // Complete placement specification
 } from "./coordinates/semantic";
 
-export type {
+export {
   // Render-space coordinates
   RenderCoordinates,
   RenderBounds,
@@ -47,46 +47,44 @@ export {
 // PLANOGRAM - Business domain
 // ============================================================================
 
-export type {
+export {
   // Configuration
   PlanogramConfig,
   FixtureConfig,
-  ShelfConfig,
   FixtureBackground,
 } from "./planogram/config";
 
-export type {
+export {
   // Product entities
   SourceProduct,
   ProductPlacement,
 } from "./planogram/product";
 
-export type {
+export {
   // Metadata
   ProductMetadata,
   ProductClassification,
   ProductVisualProperties,
 } from "./planogram/metadata";
 
-export type {
+export {
   // Placement logic
   FacingConfig,
   PyramidConfig,
+  createFacingConfig,
 } from "./planogram/placement";
-
-export { createFacingConfig } from "./planogram/placement";
 
 // ============================================================================
 // PLACEMENT MODELS - Translation strategies
 // ============================================================================
 
-export type {
+export {
   // Core interface
   IPlacementModel,
   PlacementModelProperties,
 } from "./placement-models/interface";
 
-export type {
+export {
   // Registry
   IPlacementModelRegistry,
 } from "./placement-models/registry";
@@ -95,28 +93,38 @@ export type {
 // REPOSITORIES - Data access interfaces
 // ============================================================================
 
-export type {
-  // Asset provider
+export {
+  // Asset resolution
   IAssetProvider,
 } from "./repositories/providers";
 
-export type {
+export {
   // Data repositories
   IProductRepository,
   IFixtureRepository,
   IPlanogramRepository,
 } from "./repositories/interfaces";
 
-export type {
+export {
   // Unified facade
   IDataAccessLayer,
 } from "./repositories/facade";
 
 // ============================================================================
+// VALIDATION - Quality assurance
+// ============================================================================
+
+export {
+  ValidationResult,
+  ValidationError,
+  ValidationWarning,
+} from "./validation";
+
+// ============================================================================
 // RENDERING - Drawing engine contracts
 // ============================================================================
 
-export type {
+export {
   // Viewport and context
   Viewport,
   RenderContextType,
@@ -125,9 +133,11 @@ export type {
   ProcessedPlanogram,
 } from "./rendering/engine";
 
-export type { RenderInstance } from "./rendering/instance";
-
 export type {
+  RenderInstance,
+} from "./rendering/instance";
+
+export {
   // Subsystem interfaces
   IVisualOrchestration,
   IRendererZLayerManager,
@@ -140,18 +150,39 @@ export type {
   IRendererShadowRenderer,
 } from "./rendering/subsystems";
 
-export type {
+export {
   // Interaction state
   EditingState,
 } from "./rendering/interaction";
 
-export type {
+export {
   // Visual properties
   ZLayerProperties,
   ShadowProperties,
   MaskProperties,
   DepthCategory,
 } from "./rendering/properties";
+
+// ============================================================================
+// SESSION & STATE MANAGEMENT - Flux architecture
+// ============================================================================
+
+export {
+  PlanogramAction,
+  MoveProductAction,
+  AddProductAction,
+  RemoveProductAction,
+  UpdateFacingsAction,
+  UpdateFixtureAction,
+} from "./intent/actions";
+
+export {
+  PlanogramSnapshot,
+} from "./snapshot/state";
+
+export {
+  IPlanogramProjector,
+} from "./projection/contract";
 
 // ============================================================================
 // CONVENIENCE - Helper functions

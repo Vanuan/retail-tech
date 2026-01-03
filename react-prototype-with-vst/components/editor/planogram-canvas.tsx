@@ -44,7 +44,7 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragProductId, setDragProductId] = useState<string | null>(null);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
-  const [dragStartOffset, setDragStartOffset] = useState({ x: 0, y: 0 });
+  const [dragStartWorldOffset, setDragStartWorldOffset] = useState({ x: 0, y: 0 });
 
   const [isDraggingFacings, setIsDraggingFacings] = useState(false);
   const [facingsDragStartX, setFacingsDragStartX] = useState(0);
@@ -66,10 +66,100 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
     resizeViewport,
     getVisibleInstances,
     updateProduct,
+    validatePlacement,
     products,
     updateShelf,
     reindexShelves,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    snapshot,
   } = usePlanogram();
+
+  const getProductGroupBounds = (productId: string) => {
+    const instances = lastInstances.current;
+    const groupInstances = instances.filter(
+      (inst) => inst.sourceData.id === productId,
+    );
+    if (groupInstances.length === 0) return null;
+
+    const sortedInstances = [...groupInstances].sort(
+      (a, b) => a.worldPosition.x - b.worldPosition.x,
+    );
+    const firstInstance = sortedInstances[0];
+    const lastInstance = sortedInstances[sortedInstances.length - 1];
+    if (!firstInstance.renderCoordinates || !lastInstance.renderCoordinates)
+      return null;
+
+    return {
+      x: firstInstance.renderCoordinates.x,
+      y: firstInstance.renderCoordinates.y,
+      width:
+        lastInstance.renderCoordinates.x +
+        lastInstance.renderCoordinates.width -
+        firstInstance.renderCoordinates.x,
+      height: firstInstance.renderCoordinates.height,
+      lastInstance,
+    };
+  };
+
+  const findHitAnchor = (
+    mouseX: number,
+    mouseY: number,
+    productId: string | null,
+  ) => {
+    if (!productId) return null;
+    const bounds = getProductGroupBounds(productId);
+    if (!bounds || !bounds.lastInstance.renderCoordinates) return null;
+
+    const anchorX =
+      bounds.lastInstance.renderCoordinates.x +
+      bounds.lastInstance.renderCoordinates.width;
+    const anchorY =
+      bounds.lastInstance.renderCoordinates.y +
+      bounds.lastInstance.renderCoordinates.height / 2;
+    const anchorSize = 16;
+
+    const hit =
+      mouseX >= anchorX - anchorSize / 2 &&
+      mouseX <= anchorX + anchorSize / 2 &&
+      mouseY >= anchorY - anchorSize / 2 &&
+      mouseY <= anchorY + anchorSize / 2;
+
+    return hit ? { x: anchorX, y: anchorY, size: anchorSize } : null;
+  };
+
+  // Keyboard shortcuts for Undo/Redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+Z or Cmd+Z for Undo
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        if (e.shiftKey) {
+          // Ctrl+Shift+Z or Cmd+Shift+Z for Redo
+          if (canRedo) {
+            e.preventDefault();
+            redo();
+          }
+        } else {
+          if (canUndo) {
+            e.preventDefault();
+            undo();
+          }
+        }
+      }
+      // Ctrl+Y or Cmd+Y for Redo
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        if (canRedo) {
+          e.preventDefault();
+          redo();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo, canUndo, canRedo]);
 
   useEffect(() => {
     if (!fixture) return;
@@ -165,6 +255,13 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
     // 3. Render World
     // getVisibleInstances from context handles fetching and culling
     const visibleInstances = getVisibleInstances();
+
+    if (products.length > 0 && visibleInstances.length === 0) {
+      console.warn(
+        `[PlanogramCanvas] Disappearing product detected! ${products.length} products in state but 0 visible instances.`,
+      );
+    }
+
     lastInstances.current = visibleInstances;
     renderer.current.render(visibleInstances, fixture, projection);
 
@@ -301,129 +398,45 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
 
     setLastMousePos({ x: mouseX, y: mouseY });
 
-    if (selectedProductId) {
-      const instances = lastInstances.current;
-      const selectedInstances = instances.filter((inst) => {
-        return inst.sourceData.id === selectedProductId;
+    const worldPos = Projection.unproject({ x: mouseX, y: mouseY }, fixture!, viewport);
+    const hit = snapshot?.indices.resolveWorldPoint(worldPos.x, worldPos.y);
+
+    // 1. Check Facings Anchor
+    const anchorHit = findHitAnchor(mouseX, mouseY, selectedProductId);
+    if (anchorHit) {
+      const product =
+        snapshot?.indices.productById.get(selectedProductId!)?.sourceData;
+      if (product) {
+        setIsDraggingFacings(true);
+        setFacingsDragStartX(mouseX);
+        setFacingsDragInitialFacings(product.placement.facings?.horizontal ?? 1);
+        return;
+      }
+    }
+
+    // 2. Check Product Groups (Semantic)
+    if (hit?.type === "product") {
+      const product = snapshot?.indices.productById.get(hit.id)?.sourceData;
+      const productPos = product?.placement.position as any;
+
+      setIsDragging(true);
+      setDragProductId(hit.id);
+
+      // Calculate offset in World Space (mm)
+      setDragStartWorldOffset({
+        x: worldPos.x - (productPos?.x ?? worldPos.x),
+        y: worldPos.y - (productPos?.y ?? worldPos.y),
       });
 
-      if (selectedInstances.length > 0) {
-        const sortedInstances = [...selectedInstances].sort(
-          (a, b) =>
-            a.zLayerProperties.facingContribution -
-            b.zLayerProperties.facingContribution,
-        );
-        const lastInstance = sortedInstances[sortedInstances.length - 1];
-        if (!lastInstance.renderCoordinates) return;
-
-        const anchorX =
-          lastInstance.renderCoordinates.x +
-          lastInstance.renderCoordinates.width;
-        const anchorY =
-          lastInstance.renderCoordinates.y +
-          lastInstance.renderCoordinates.height / 2;
-        const anchorSize = 16;
-
-        if (
-          mouseX >= anchorX - anchorSize / 2 &&
-          mouseX <= anchorX + anchorSize / 2 &&
-          mouseY >= anchorY - anchorSize / 2 &&
-          mouseY <= anchorY + anchorSize / 2
-        ) {
-          const product = products.find((p) => p.id === selectedProductId);
-          if (product) {
-            setIsDraggingFacings(true);
-            setFacingsDragStartX(mouseX);
-            setFacingsDragInitialFacings(
-              product.placement.facings?.horizontal ?? 1,
-            );
-            return;
-          }
-        }
-      }
-    }
-
-    const instances = lastInstances.current;
-
-    const productGroups = new Map<string, RenderInstance[]>();
-    instances.forEach((instance) => {
-      const productId = instance.sourceData.id;
-
-      if (!productGroups.has(productId)) {
-        productGroups.set(productId, []);
-      }
-      productGroups.get(productId)!.push(instance);
-    });
-
-    for (const [productId, groupInstances] of Array.from(
-      productGroups.entries(),
-    ).reverse()) {
-      const sortedInstances = [...groupInstances].sort(
-        (a, b) =>
-          a.zLayerProperties.facingContribution -
-          b.zLayerProperties.facingContribution,
-      );
-      const firstInstance = sortedInstances[0];
-      const lastInstance = sortedInstances[sortedInstances.length - 1];
-      if (!firstInstance.renderCoordinates || !lastInstance.renderCoordinates)
-        return;
-
-      const groupX = firstInstance.renderCoordinates.x;
-      const groupY = firstInstance.renderCoordinates.y;
-      const groupWidth =
-        lastInstance.renderCoordinates.x +
-        lastInstance.renderCoordinates.width -
-        firstInstance.renderCoordinates.x;
-      const groupHeight = firstInstance.renderCoordinates.height;
-
-      const hit =
-        mouseX >= groupX &&
-        mouseX <= groupX + groupWidth &&
-        mouseY >= groupY &&
-        mouseY <= groupY + groupHeight;
-
-      if (hit) {
-        setIsDragging(true);
-        setDragProductId(productId);
-        setDragStartOffset({
-          x: mouseX - groupX,
-          y: mouseY - groupY,
-        });
-        selectProduct(productId);
-        return;
-      }
-    }
-
-    if (!fixture) {
-      setIsPanning(true);
-      selectProduct(null);
+      selectProduct(hit.id);
       return;
     }
 
-    const scale = viewport.zoom;
-    const fixtureWidth = fixture.dimensions.width * scale;
-    const panX = viewport.offset.x;
-    const panY = viewport.offset.y;
-
-    const shelves =
-      (fixture.config.shelves as Array<{
-        index: number;
-        baseHeight: number;
-      }>) || [];
-    for (const shelf of shelves) {
-      const shelfY =
-        panY + (fixture.dimensions.height - shelf.baseHeight) * scale;
-      const clickTolerance = 15;
-
-      if (
-        mouseX >= panX &&
-        mouseX <= panX + fixtureWidth &&
-        Math.abs(mouseY - shelfY) < clickTolerance
-      ) {
-        setSelectedShelf(shelf.index);
-        selectProduct(null);
-        return;
-      }
+    // 3. Check Shelves (Semantic)
+    if (hit?.type === "shelf") {
+      setSelectedShelf(hit.index!);
+      selectProduct(null);
+      return;
     }
 
     setIsPanning(true);
@@ -468,7 +481,7 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
     }
 
     if (isDraggingFacings && selectedProductId) {
-      const product = products.find((p) => p.id === selectedProductId);
+      const product = snapshot?.indices.productById.get(selectedProductId)?.sourceData;
       if (product) {
         const metadata = productMetadata[product.sku];
         if (metadata) {
@@ -476,26 +489,38 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
           const deltaX = mouseX - facingsDragStartX;
           const widthPerFacingPx = metadata.dimensions.physical.width * scale;
 
-          const facingsDelta = Math.round(deltaX / widthPerFacingPx);
+          let facingsDelta = Math.round(deltaX / widthPerFacingPx);
+          if (isNaN(facingsDelta) || !isFinite(facingsDelta)) facingsDelta = 0;
+
           const newFacings = Math.max(
             1,
             Math.min(100, facingsDragInitialFacings + facingsDelta),
           );
 
           if (newFacings !== product.placement.facings?.horizontal) {
-            updateProduct(
-              selectedProductId,
-              {
-                placement: {
-                  ...product.placement,
-                  facings: createFacingConfig(
-                    newFacings,
-                    product.placement.facings?.vertical ?? 1,
-                  ),
-                },
-              },
-              true,
+            // Validate bounds and collisions before updating
+            const validation = validatePlacement(
+              product.sku,
+              product.placement.position,
+              newFacings,
+              product.id,
             );
+
+            if (validation.valid) {
+              updateProduct(
+                selectedProductId,
+                {
+                  placement: {
+                    ...product.placement,
+                    facings: createFacingConfig(
+                      newFacings,
+                      product.placement.facings?.vertical ?? 1,
+                    ),
+                  },
+                },
+                true,
+              );
+            }
           }
         }
       }
@@ -515,28 +540,24 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
     if (isDragging && dragProductId && fixture) {
       const projection = viewport;
 
-      const product = products.find((p) => p.id === dragProductId);
+      const product = snapshot?.indices.productById.get(dragProductId)?.sourceData;
       const metadata = product ? productMetadata[product.sku] : null;
       const pModel =
         placementRegistry.get(fixture.placementModel) ||
         placementRegistry.get("shelf-surface");
 
       if (product && metadata && pModel) {
-        const renderX = mouseX - dragStartOffset.x;
-        const renderY = mouseY - dragStartOffset.y;
+        // Unproject the current mouse position
+        const currentWorldPos = renderer.current?.screenToWorld({ x: mouseX, y: mouseY }) || { x: 0, y: 0, z: 0 };
 
-        // Use new Projection utility for unprojecting
-        const worldPos = Projection.unproject(
-          { x: renderX, y: renderY },
-          fixture,
-          projection,
-        );
+        // Apply the original world-space offset to find the target semantic origin
+        const targetWorldX = currentWorldPos.x - dragStartWorldOffset.x;
+        const targetWorldY = currentWorldPos.y - dragStartWorldOffset.y;
 
-        // Adjust for product height (bottom-left origin in world space)
         const projectedPosition = pModel.project(
           {
-            x: worldPos.x,
-            y: worldPos.y - metadata.dimensions.physical.height,
+            x: targetWorldX,
+            y: targetWorldY,
             z: 0,
           },
           fixture,
@@ -546,6 +567,10 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
         let newPosition = projectedPosition;
         if (projectedPosition.model === "shelf-surface") {
           const shelfPos = projectedPosition as ShelfSurfacePosition;
+
+          // Prevent state corruption from NaN/Infinity values
+          if (isNaN(shelfPos.x) || !isFinite(shelfPos.x)) return;
+
           const facings = product.placement.facings?.horizontal ?? 1;
           const totalWidth = metadata.dimensions.physical.width * facings;
           const maxX = fixture.dimensions.width - totalWidth;
@@ -556,76 +581,51 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
           };
         }
 
-        updateProduct(
+        // Validate movement (Physics Restrictions)
+        const validation = validatePlacement(
+          product.sku,
+          newPosition,
+          product.placement.facings?.horizontal || 1,
           dragProductId,
-          {
-            placement: {
-              ...product.placement,
-              position: newPosition,
-            },
-          },
-          true,
         );
+
+        if (validation.valid) {
+          updateProduct(
+            dragProductId,
+            {
+              placement: {
+                ...product.placement,
+                position: newPosition,
+              },
+            },
+            true,
+          );
+        }
       }
 
       canvas.style.cursor = "grabbing";
       return;
     }
 
-    if (selectedProductId) {
-      const instances = lastInstances.current;
-      const selectedInstances = instances.filter((inst) => {
-        return inst.sourceData.id === selectedProductId;
-      });
+    const worldPos = Projection.unproject({ x: mouseX, y: mouseY }, fixture!, viewport);
+    const hit = snapshot?.indices.resolveWorldPoint(worldPos.x, worldPos.y);
 
-      if (selectedInstances.length > 0) {
-        const sortedInstances = [...selectedInstances].sort(
-          (a, b) =>
-            a.zLayerProperties.facingContribution -
-            b.zLayerProperties.facingContribution,
-        );
-        const lastInstance = sortedInstances[sortedInstances.length - 1];
-        if (!lastInstance.renderCoordinates) return;
-
-        const anchorX =
-          lastInstance.renderCoordinates.x +
-          lastInstance.renderCoordinates.width;
-        const anchorY =
-          lastInstance.renderCoordinates.y +
-          lastInstance.renderCoordinates.height / 2;
-        const anchorSize = 16;
-
-        if (
-          mouseX >= anchorX - anchorSize / 2 &&
-          mouseX <= anchorX + anchorSize / 2 &&
-          mouseY >= anchorY - anchorSize / 2 &&
-          mouseY <= anchorY + anchorSize / 2
-        ) {
-          setHoveredAnchor(selectedProductId);
-          canvas.style.cursor = "ew-resize";
-          return;
-        }
-      }
+    // 1. Check Facings Anchor Hover
+    const anchorHit = findHitAnchor(mouseX, mouseY, selectedProductId);
+    if (anchorHit) {
+      setHoveredAnchor(selectedProductId);
+      canvas.style.cursor = "ew-resize";
+      return;
     }
     setHoveredAnchor(null);
 
-    const instances = lastInstances.current;
-    for (let i = instances.length - 1; i >= 0; i--) {
-      const instance = instances[i];
-      if (
-        instance.renderCoordinates &&
-        mouseX >= instance.renderCoordinates.x &&
-        mouseX <=
-          instance.renderCoordinates.x + instance.renderCoordinates.width &&
-        mouseY >= instance.renderCoordinates.y &&
-        mouseY <=
-          instance.renderCoordinates.y + instance.renderCoordinates.height
-      ) {
-        setHoveredInstanceId(instance.id);
-        canvas.style.cursor = "pointer";
-        return;
-      }
+    // 2. Check Product/Instance Hover (Semantic)
+    if (hit?.type === "product") {
+      setHoveredInstanceId(hit.id);
+      canvas.style.cursor = "pointer";
+      return;
     }
+
     setHoveredInstanceId(null);
     canvas.style.cursor = "default";
   };

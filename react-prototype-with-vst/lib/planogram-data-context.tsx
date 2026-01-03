@@ -32,6 +32,7 @@ interface PlanogramDataContextType {
   // Actions
   loadPlanogram: (id: string) => Promise<void>;
   savePlanogram: () => Promise<void>;
+  fetchAllMetadata: () => Promise<void>;
   updateConfig: (updater: (prev: PlanogramConfig) => PlanogramConfig) => void;
   setConfig: (config: PlanogramConfig) => void;
   refreshProcessing: () => void;
@@ -143,14 +144,37 @@ export function PlanogramDataProvider({
       setError(null);
       try {
         await dal.initialize();
-        const loadedConfig = await dal.planograms.getById(id);
-        if (!loadedConfig) throw new Error(`Planogram ${id} not found`);
 
-        const loadedMetadata = await ensureMetadata(loadedConfig);
+        // 1. Fetch full catalog so the Product Library is populated
+        const allProducts = await dal.products.listAll();
+        const catalogMeta = new Map(metadataRef.current);
+        allProducts.forEach((p) => catalogMeta.set(p.sku, p));
+        setMetadata(catalogMeta);
 
+        // 2. Load the planogram
+        let loadedConfig = await dal.planograms.getById(id);
+
+        let isNew = false;
+        if (!loadedConfig) {
+          // If not found, initialize as a new planogram using mock as template
+          const mock = await dal.planograms.getById("mock");
+          if (!mock) throw new Error(`Planogram ${id} not found`);
+
+          loadedConfig = {
+            ...mock,
+            id,
+            name: "New Planogram",
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            products: [], // Start empty for a truly new planogram
+          };
+          isNew = true;
+        }
+
+        // Use catalogMeta directly to avoid waiting for state sync
         _setConfig(loadedConfig);
-        setHasUnsavedChanges(false);
-        processConfig(loadedConfig, loadedMetadata);
+        setHasUnsavedChanges(isNew);
+        processConfig(loadedConfig, catalogMeta);
       } catch (err) {
         console.error(err);
         setError(
@@ -168,6 +192,8 @@ export function PlanogramDataProvider({
     setIsSaving(true);
     try {
       await dal.planograms.save(config.id, config);
+      // Use functional update to ensure we are clearing the "dirty" state
+      // even if other updates are in the pipeline.
       setHasUnsavedChanges(false);
     } catch (err) {
       setError(
@@ -194,7 +220,6 @@ export function PlanogramDataProvider({
 
   const setConfig = useCallback((newConfig: PlanogramConfig) => {
     _setConfig(newConfig);
-    setHasUnsavedChanges(true);
   }, []);
 
   const refreshProcessing = useCallback(() => {
@@ -202,6 +227,16 @@ export function PlanogramDataProvider({
       processConfig(config, metadataRef.current);
     }
   }, [config, processConfig]);
+
+  const fetchAllMetadata = useCallback(async () => {
+    await dal.initialize();
+    const all = await dal.products.listAll();
+    setMetadata((prev) => {
+      const next = new Map(prev);
+      all.forEach((p) => next.set(p.sku, p));
+      return next;
+    });
+  }, []);
 
   // Effect: React to config or metadata changes to keep renderInstances in sync
   useEffect(() => {
@@ -249,6 +284,7 @@ export function PlanogramDataProvider({
     updateConfig,
     setConfig,
     refreshProcessing,
+    fetchAllMetadata,
   };
 
   return (
