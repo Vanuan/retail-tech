@@ -14,13 +14,17 @@
     "strictNullChecks": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@vst/vocabulary-types": ["vocabulary-types/index.ts"],
+      "@vst/vocabulary-logic": ["vocabulary-logic/index.ts"],
+      "@vst/session-types": ["session-types/index.ts"],
+      "@vst/placement-core": ["placement-core/index.ts"],
+      "@vst/core-processing": ["core-processing/index.ts"],
+      "@vst/session": ["session/index.ts"],
+    },
   },
-  "include": [
-    "**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ]
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist"],
 }

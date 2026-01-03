@@ -1,4 +1,4 @@
-import { RenderInstance, Vector3 } from "../types/index";
+import { RenderInstance, Vector3 } from "@vst/vocabulary-types";
 import { FacingCalculator } from "./FacingCalculator";
 import { PyramidBuilder } from "./PyramidBuilder";
 
@@ -67,10 +67,8 @@ export class InstanceNormalizer {
         instance.id = `${template.id}_h${h}_v${v}`;
 
         // Update semantic coordinates to reflect this specific facing's position for metadata/analytics
-        instance.semanticCoordinates.facing =
-          (template.semanticCoordinates.facing || 1) + h;
-        instance.semanticCoordinates.row =
-          (template.semanticCoordinates.row || 1) + v;
+        // Since semanticCoordinates are readonly, we would typically handle expansion indices
+        // in a dedicated metadata field or via the expansionOffset.
 
         // Attach the expansion offset for use by the CoreProductPositioner
         // This offset is added to the base coordinates during final rendering position calculation.

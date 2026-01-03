@@ -1,9 +1,10 @@
+import { PlanogramConfig } from "@vst/vocabulary-types";
 import {
-  PlanogramConfig,
   PlanogramAction,
   PlanogramSnapshot,
   IPlanogramProjector,
-} from "@vst/types";
+  ISessionManager,
+} from "@vst/session-types";
 import { HistoryStack } from "./HistoryStack";
 
 /**
@@ -12,7 +13,7 @@ import { HistoryStack } from "./HistoryStack";
  * Implements a Flux-like architecture where actions are dispatched,
  * history is managed, and the resulting state is projected.
  */
-export class SessionStore {
+export class SessionStore implements ISessionManager {
   private baseConfig: PlanogramConfig;
   private history: HistoryStack;
   private projector: IPlanogramProjector;
@@ -20,6 +21,14 @@ export class SessionStore {
 
   // The current observable truth
   public currentSnapshot: PlanogramSnapshot | null = null;
+
+  /**
+   * The current derived state of the planogram.
+   * Implementation of ISessionManager.snapshot.
+   */
+  public get snapshot(): PlanogramSnapshot | null {
+    return this.currentSnapshot;
+  }
 
   // State flags
   public isProjecting: boolean = false;
@@ -78,7 +87,9 @@ export class SessionStore {
    * Subscribes to changes in the projected snapshot.
    * Returns a cleanup function.
    */
-  public subscribe(callback: (snapshot: PlanogramSnapshot) => void): () => void {
+  public subscribe(
+    callback: (snapshot: PlanogramSnapshot) => void,
+  ): () => void {
     this.listeners.add(callback);
     // If we already have state, notify immediately
     if (this.currentSnapshot) {
@@ -96,7 +107,10 @@ export class SessionStore {
     this.isProjecting = true;
     try {
       const actions = this.history.activeActions;
-      this.currentSnapshot = await this.projector.project(this.baseConfig, actions);
+      this.currentSnapshot = await this.projector.project(
+        this.baseConfig,
+        actions,
+      );
       this.notify();
     } catch (error) {
       console.error("Failed to project planogram state:", error);

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePlanogram } from "@/lib/planogram-editor-context";
-import { createFacingConfig } from "@/lib/vst/types";
+import { createFacingConfig } from "@vst/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

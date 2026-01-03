@@ -2,13 +2,15 @@ import {
   IVstRenderer,
   RenderEngineConfig,
   RenderProjection,
-} from "../../types/rendering/engine";
-import { RenderInstance } from "../../types/rendering/instance";
-import { FixtureConfig } from "../../types/planogram/config";
-import { Vector2, Vector3 } from "../../types/core/geometry";
+  RenderInstance,
+  FixtureConfig,
+  Vector2,
+  Vector3,
+  IAssetProvider as IBrowserAssetProvider,
+  Pixels,
+} from "@vst/vocabulary-types";
+import { isShelfSurfacePosition } from "@vst/utils";
 import { Projection } from "../projection";
-import { IBrowserAssetProvider } from "../../types/repositories/providers";
-import { Pixels } from "../../types/core/units";
 import { LabelUtils } from "./shared/label-utils";
 
 /**
@@ -289,11 +291,10 @@ export class TescoRenderer implements IVstRenderer {
       }
 
       // --- Space usage indicator ---
-      const shelfInstances = instances.filter(
-        (inst) =>
-          inst.semanticCoordinates.model === "shelf-surface" &&
-          inst.semanticCoordinates.shelfIndex === shelf.index,
-      );
+      const shelfInstances = instances.filter((inst) => {
+        const pos = inst.semanticCoordinates;
+        return isShelfSurfacePosition(pos) && pos.shelfIndex === shelf.index;
+      });
       let shelfSpaceUsed = 0;
       shelfInstances.forEach((inst) => {
         const rightEdge =

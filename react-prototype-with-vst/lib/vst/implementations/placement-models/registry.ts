@@ -3,8 +3,8 @@
  * Implementation of the central lookup for all available translation strategies.
  */
 
-import { IPlacementModel } from "../../types/placement-models/interface";
-import { IPlacementModelRegistry } from "../../types/placement-models/registry";
+import { IPlacementModel } from "./interface";
+import { IPlacementModelRegistry } from "./registry-interface";
 import { ShelfSurfacePlacementModel } from "./shelf-surface";
 
 export class PlacementModelRegistry implements IPlacementModelRegistry {
@@ -29,7 +29,9 @@ export class PlacementModelRegistry implements IPlacementModelRegistry {
    */
   public register(model: IPlacementModel): void {
     if (this.models.has(model.id)) {
-      console.warn(`Placement model with ID "${model.id}" is already registered. Overwriting.`);
+      console.warn(
+        `Placement model with ID "${model.id}" is already registered. Overwriting.`,
+      );
     }
     this.models.set(model.id, model);
   }

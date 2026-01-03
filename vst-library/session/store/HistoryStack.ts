@@ -1,4 +1,4 @@
-import { PlanogramAction } from "@vst/types";
+import { PlanogramAction } from "@vst/session-types";
 
 /**
  * Manages the timeline of actions for Undo/Redo functionality.

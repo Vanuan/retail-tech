@@ -1,0 +1,35 @@
+{
+  "name": "@vst/vocabulary-logic",
+  "version": "1.0.0",
+  "description": "Behavioral logic, factories, and validators for VST vocabulary types.",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "module": "./index.ts",
+  "files": [
+    "**/*.ts",
+    "**/*.md",
+    "!node_modules",
+    "!tsconfig.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "vst",
+    "logic",
+    "validators",
+    "factories"
+  ],
+  "author": "VST Interview Team",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@vst/vocabulary-types": "1.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

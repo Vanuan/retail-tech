@@ -1,4 +1,10 @@
-import { RenderInstance, ShadowProperties } from "../types";
+import {
+  RenderInstance,
+  ShadowProperties,
+  FixtureConfig,
+} from "@vst/vocabulary-types";
+import { isShelfSurfacePosition } from "@vst/vocabulary-logic";
+import { IPlacementModel } from "@vst/placement-core";
 
 /**
  * SHADOW TYPE DETERMINER
@@ -9,9 +15,13 @@ export class ShadowTypeDeterminer {
   /**
    * Processes the instance to determine its shadow properties.
    */
-  async process(instance: RenderInstance): Promise<RenderInstance> {
-    const shadowConfig = this.determineShadowConfig(instance);
-    const needsShadow = this.needsShadow(instance);
+  async process(
+    instance: RenderInstance,
+    fixture: FixtureConfig,
+    _placementModel: IPlacementModel,
+  ): Promise<RenderInstance> {
+    const shadowConfig = this.determineShadowConfig(fixture);
+    const needsShadow = this.needsShadow(instance, fixture);
 
     return {
       ...instance,
@@ -31,9 +41,9 @@ export class ShadowTypeDeterminer {
    * Determines the shadow configuration based on the fixture type and metadata.
    */
   private determineShadowConfig(
-    instance: RenderInstance,
+    fixture: FixtureConfig,
   ): Omit<ShadowProperties, "needsShadow"> {
-    const fixtureType = instance.fixture.type;
+    const fixtureType = fixture.type;
 
     // Default configurations based on fixture context
     const configs: Record<string, Omit<ShadowProperties, "needsShadow">> = {
@@ -69,15 +79,24 @@ export class ShadowTypeDeterminer {
   /**
    * Logic to determine if a product should cast a shadow.
    */
-  private needsShadow(instance: RenderInstance): boolean {
+  private needsShadow(
+    instance: RenderInstance,
+    fixture: FixtureConfig,
+  ): boolean {
+    const semanticPos = instance.semanticCoordinates;
+    let shelfIndex = 0;
+
+    if (isShelfSurfacePosition(semanticPos)) {
+      shelfIndex = semanticPos.shelfIndex;
+    }
+
     // Products on the bottom shelf of a floor-standing unit might not cast shadows on the floor
-    const shelfIndex = instance.semanticCoordinates.shelfIndex || 0;
-    if (shelfIndex === 0 && instance.fixture.type === "shelf") {
+    if (shelfIndex === 0 && fixture.type === "shelf") {
       return false;
     }
 
     // Hanging products on pegboards always benefit from a slight contact shadow
-    if (instance.fixture.type === "pegboard") {
+    if (fixture.type === "pegboard") {
       return true;
     }
 

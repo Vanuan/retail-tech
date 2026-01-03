@@ -1,4 +1,4 @@
-import { RenderInstance, Vector2 } from "../types/index";
+import { RenderInstance, Vector2 } from "@vst/vocabulary-types";
 
 /**
  * FACING CALCULATOR (Layer 3)
@@ -17,7 +17,7 @@ export class FacingCalculator {
   public calculateFacingOffset(
     instance: RenderInstance,
     hIndex: number,
-    vIndex: number
+    vIndex: number,
   ): Vector2 {
     const { physicalDimensions, facingData } = instance;
 
@@ -35,7 +35,7 @@ export class FacingCalculator {
 
     return {
       x: offsetX,
-      y: offsetY
+      y: offsetY,
     };
   }
 
@@ -47,7 +47,7 @@ export class FacingCalculator {
    */
   public calculateFacingScale(
     totalWidthAvailable: number,
-    instance: RenderInstance
+    instance: RenderInstance,
   ): number {
     const { physicalDimensions, facingData } = instance;
     if (!facingData || facingData.horizontal <= 1) return 1.0;

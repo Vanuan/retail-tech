@@ -1,4 +1,13 @@
-import { RenderInstance } from "../types";
+import {
+  RenderInstance,
+  FixtureConfig,
+  Millimeters,
+} from "@vst/vocabulary-types";
+import {
+  isShelfSurfacePosition,
+  isFreeform3DPosition,
+} from "@vst/vocabulary-logic";
+import { IPlacementModel } from "@vst/placement-core";
 
 /**
  * CORE PERSPECTIVE SCALER
@@ -9,15 +18,30 @@ export class CorePerspectiveScaler {
   /**
    * Processes the instance to determine its scale based on depth.
    */
-  async process(instance: RenderInstance): Promise<RenderInstance> {
-    const { z, depth = 0 } = instance.semanticCoordinates;
-    const maxDepth = instance.fixture.dimensions.depth || 400;
+  async process(
+    instance: RenderInstance,
+    fixture: FixtureConfig,
+    _placementModel: IPlacementModel,
+  ): Promise<RenderInstance> {
+    const semanticPos = instance.semanticCoordinates;
+    const maxDepth = fixture.dimensions.depth || 400;
+
+    let z: number | undefined;
+    let depthRow = 0;
+
+    if (isFreeform3DPosition(semanticPos)) {
+      z = semanticPos.position.z;
+    } else if (isShelfSurfacePosition(semanticPos)) {
+      depthRow = semanticPos.depth;
+    }
 
     // Calculate depth ratio (0.0 = front, 1.0 = back)
     // Prioritize absolute Z (mm) if available.
     // Otherwise, estimate physical depth using logical row index and product depth.
     let physicalDepth =
-      z !== undefined ? z : depth * (instance.physicalDimensions.depth || 100);
+      z !== undefined
+        ? z
+        : depthRow * (instance.physicalDimensions.depth || 100);
 
     // Add expansion offset Z (used in pyramid stacking)
     if (instance.expansionOffset?.z) {
@@ -34,9 +58,10 @@ export class CorePerspectiveScaler {
       depthRatio,
       renderScale,
       scaledDimensions: {
-        width: instance.visualDimensions.width * renderScale,
-        height: instance.visualDimensions.height * renderScale,
-        depth: instance.physicalDimensions.depth * renderScale,
+        width: (instance.physicalDimensions.width * renderScale) as Millimeters,
+        height: (instance.physicalDimensions.height *
+          renderScale) as Millimeters,
+        depth: (instance.physicalDimensions.depth * renderScale) as Millimeters,
       },
       visualProperties: {
         ...instance.visualProperties,

@@ -1,6 +1,9 @@
-import { Vector2, Vector3 } from "../types/core/geometry";
-import { RenderProjection } from "../types/rendering/engine";
-import { FixtureConfig } from "../types/planogram/config";
+import {
+  Vector2,
+  Vector3,
+  RenderProjection,
+  FixtureConfig,
+} from "@vst/vocabulary-types";
 
 /**
  * Projection Utility

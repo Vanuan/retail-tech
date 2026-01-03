@@ -3,8 +3,12 @@ import {
   RenderBounds,
   Vector2,
   Vector3,
-  IPlacementModel,
-} from "../types";
+  FixtureConfig,
+  ZIndex,
+  Degrees,
+  Pixels,
+} from "@vst/vocabulary-types";
+import { IPlacementModel } from "@vst/placement-core";
 
 /**
  * CORE PRODUCT POSITIONER
@@ -16,14 +20,18 @@ export class CoreProductPositioner {
   /**
    * Processes the instance to calculate its final coordinates and bounds.
    */
-  async process(instance: RenderInstance): Promise<RenderInstance> {
-    const placementModel: IPlacementModel = instance.placementModel;
-
+  async process(
+    instance: RenderInstance,
+    fixture: FixtureConfig,
+    placementModel: IPlacementModel,
+  ): Promise<RenderInstance> {
     // 1. Transform semantic coordinates to base render coordinates using the Placement Model
     // These coordinates are typically in fixture-space (e.g., mm or normalized units)
     const basePos: Vector3 = placementModel.transform(
       instance.semanticCoordinates,
-      instance.fixture,
+      fixture,
+      instance.physicalDimensions,
+      instance.anchorPoint,
     );
 
     // 1.1 Apply Layer 3 expansion offsets (Facings & Pyramids)
@@ -53,11 +61,12 @@ export class CoreProductPositioner {
     return {
       ...instance,
       renderCoordinates: {
-        ...scaledCoords,
-        z: finalBasePos.z,
+        x: scaledCoords.x as Pixels,
+        y: scaledCoords.y as Pixels,
+        z: finalBasePos.z as ZIndex,
         baseline,
         anchorPoint: instance.anchorPoint,
-        rotation: 0, // Base rotation, can be modified by renderer layer
+        rotation: 0 as Degrees, // Base rotation, can be modified by renderer layer
         scale: instance.renderScale,
       },
       renderBounds: bounds,
@@ -99,13 +108,13 @@ export class CoreProductPositioner {
     height: number;
   }): RenderBounds {
     return {
-      x: coords.x,
-      y: coords.y,
-      width: coords.width,
-      height: coords.height,
+      x: coords.x as Pixels,
+      y: coords.y as Pixels,
+      width: coords.width as Pixels,
+      height: coords.height as Pixels,
       center: {
-        x: coords.x + coords.width / 2,
-        y: coords.y + coords.height / 2,
+        x: (coords.x + coords.width / 2) as Pixels,
+        y: (coords.y + coords.height / 2) as Pixels,
       },
     };
   }

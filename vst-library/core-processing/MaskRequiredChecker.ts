@@ -1,4 +1,5 @@
-import { RenderInstance } from "../types";
+import { RenderInstance, FixtureConfig } from "@vst/vocabulary-types";
+import { IPlacementModel } from "@vst/placement-core";
 
 /**
  * MASK REQUIRED CHECKER
@@ -10,7 +11,11 @@ export class MaskRequiredChecker {
   /**
    * Processes the instance to determine mask properties.
    */
-  async process(instance: RenderInstance): Promise<RenderInstance> {
+  async process(
+    instance: RenderInstance,
+    _fixture: FixtureConfig,
+    _placementModel: IPlacementModel,
+  ): Promise<RenderInstance> {
     const needsMask = this.determineIfMaskNeeded(instance);
 
     return {

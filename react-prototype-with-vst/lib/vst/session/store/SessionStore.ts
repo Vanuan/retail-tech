@@ -1,9 +1,7 @@
-import {
-  PlanogramConfig,
-  PlanogramAction,
-  PlanogramSnapshot,
-  IPlanogramProjector,
-} from "@vst/types";
+import { PlanogramConfig } from "@vst/vocabulary-types";
+import { IPlanogramSequenceRoller } from "../types/contract";
+import { PlanogramAction } from "../types/actions";
+import { PlanogramSnapshot } from "../types/state";
 import { HistoryStack } from "./HistoryStack";
 
 /**
@@ -15,7 +13,7 @@ import { HistoryStack } from "./HistoryStack";
 export class SessionStore {
   private baseConfig: PlanogramConfig;
   private history: HistoryStack;
-  private projector: IPlanogramProjector;
+  private roller: IPlanogramSequenceRoller;
   private selection: string[] = [];
   private listeners: Set<(snapshot: PlanogramSnapshot) => void> = new Set();
   private projectionId: number = 0;
@@ -26,9 +24,9 @@ export class SessionStore {
   // State flags
   public isProjecting: boolean = false;
 
-  constructor(base: PlanogramConfig, projector: IPlanogramProjector) {
+  constructor(base: PlanogramConfig, roller: IPlanogramSequenceRoller) {
     this.baseConfig = base;
-    this.projector = projector;
+    this.roller = roller;
     this.history = new HistoryStack();
 
     // Trigger initial projection
@@ -130,7 +128,9 @@ export class SessionStore {
    * Subscribes to changes in the projected snapshot.
    * Returns a cleanup function.
    */
-  public subscribe(callback: (snapshot: PlanogramSnapshot) => void): () => void {
+  public subscribe(
+    callback: (snapshot: PlanogramSnapshot) => void,
+  ): () => void {
     this.listeners.add(callback);
     // If we already have state, notify immediately
     if (this.currentSnapshot) {
@@ -149,7 +149,7 @@ export class SessionStore {
     this.isProjecting = true;
     try {
       const actions = this.history.activeActions;
-      const snapshot = await this.projector.project(this.baseConfig, actions);
+      const snapshot = await this.roller.roll(this.baseConfig, actions);
 
       // Concurrency Guard: If a newer projection has started, ignore this result.
       // This prevents out-of-order updates from overwriting the latest state.

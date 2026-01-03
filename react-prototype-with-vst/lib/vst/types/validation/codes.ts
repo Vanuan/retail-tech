@@ -1,6 +1,0 @@
-export type ValidationErrorCode =
-  | "COLLISION_DETECTED"
-  | "OUT_OF_BOUNDS"
-  | "INVALID_FACING"
-  | "UNSUPPORTED_DIMENSION"
-  | "MISSING_ASSET";

@@ -30,7 +30,9 @@
     "@types/react": "^18.0.0"
   },
   "dependencies": {
-    "@vst/types": "1.0.0"
+    "@vst/vocabulary-types": "1.0.0",
+    "@vst/session-types": "1.0.0",
+    "@vst/core-processing": "1.0.0"
   },
   "publishConfig": {
     "access": "public"

@@ -9,30 +9,28 @@
 // STORE - State Container
 // ============================================================================
 
-export {
-  SessionStore
-} from "./store/SessionStore";
+export { SessionStore } from "./store/SessionStore";
 
-export {
-  HistoryStack
-} from "./store/HistoryStack";
+export { HistoryStack } from "./store/HistoryStack";
 
 // ============================================================================
 // PROJECTION - Logic Engine
 // ============================================================================
 
-export {
-  CoreProjector
-} from "./projection/CoreProjector";
+export { CoreSequenceRoller } from "./projection/CoreSequenceRoller";
 
 // ============================================================================
 // REACT INTEGRATION
 // ============================================================================
 
-export {
-  usePlanogramSession
-} from "./hooks/usePlanogramSession";
+export { usePlanogramSession } from "./hooks/usePlanogramSession";
 
-export type {
-  UsePlanogramSessionResult
-} from "./hooks/usePlanogramSession";
+export type { UsePlanogramSessionResult } from "./hooks/usePlanogramSession";
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export * from "./types/actions";
+export * from "./types/state";
+export * from "./types/contract";

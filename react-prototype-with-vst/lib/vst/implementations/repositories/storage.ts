@@ -1,5 +1,5 @@
-import { PlanogramConfig } from "@/lib/vst/types";
-import { PlanogramConfigSchema } from "@/lib/vst/types/planogram/schemas";
+import { PlanogramConfig } from "@vst/vocabulary-types";
+import { PlanogramConfigSchema } from "@/vst-library/vocabulary-types/planogram/schemas";
 
 const KEY_PREFIX = "vst-planogram-";
 
@@ -96,10 +96,17 @@ export const planogramStorage = {
           modified = true;
         } else {
           if (!config.fixture.dimensions) {
-            config.fixture.dimensions = { width: 1000, height: 2000, depth: 500 };
+            config.fixture.dimensions = {
+              width: 1000,
+              height: 2000,
+              depth: 500,
+            };
             modified = true;
           }
-          if (!config.fixture.config || !Array.isArray(config.fixture.config.shelves)) {
+          if (
+            !config.fixture.config ||
+            !Array.isArray(config.fixture.config.shelves)
+          ) {
             config.fixture.config = {
               shelves: [{ id: "shelf-0", index: 0, baseHeight: 300 }],
             };

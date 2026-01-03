@@ -1,10 +1,10 @@
-import { IBrowserAssetProvider } from "../types";
+import { IAssetProvider } from "@vst/vocabulary-types";
 
 /**
  * Browser implementation of IAssetProvider.
  * Handles image loading, caching, and URL resolution in a browser environment.
  */
-export class BrowserAssetProvider implements IBrowserAssetProvider {
+export class BrowserAssetProvider implements IAssetProvider {
   private cache: Map<string, HTMLImageElement> = new Map();
   private pending: Map<string, Promise<HTMLImageElement>> = new Map();
 
@@ -18,7 +18,7 @@ export class BrowserAssetProvider implements IBrowserAssetProvider {
   /**
    * Resolves a SKU and angle to a sprite URL.
    */
-  getSpriteUrl(
+  public getSpriteUrl(
     sku: string,
     angle: string | number = 0,
     variant?: string,
@@ -40,7 +40,7 @@ export class BrowserAssetProvider implements IBrowserAssetProvider {
   /**
    * Resolves a SKU to its transparency mask URL.
    */
-  getMaskUrl(sku: string): string {
+  public getMaskUrl(sku: string): string {
     if (this.maskRegistry.has(sku)) {
       return this.maskRegistry.get(sku)!;
     }
@@ -50,7 +50,7 @@ export class BrowserAssetProvider implements IBrowserAssetProvider {
   /**
    * Loads an image from a URL, using an in-memory cache.
    */
-  loadImage(url: string): Promise<HTMLImageElement> {
+  public loadImage(url: string): Promise<HTMLImageElement> {
     if (!url) {
       return Promise.reject(new Error("URL is empty"));
     }
@@ -95,20 +95,21 @@ export class BrowserAssetProvider implements IBrowserAssetProvider {
 
   /**
    * Retrieves a loaded image from the cache synchronously.
-   * Returns undefined if the image is not loaded.
+   * Returns null if the image is not loaded.
    */
-  getLoadedImage(url: string): HTMLImageElement | undefined {
-    return this.cache.get(url);
+  public getLoadedImage(url: string): HTMLImageElement | null {
+    return this.cache.get(url) || null;
   }
 
   /**
    * Prefetches a list of URLs into the cache.
    */
-  async prefetch(urls: string[]): Promise<void> {
-    const promises = urls.map((url) =>
+  public async prefetch(urls: string[]): Promise<void> {
+    const uniqueUrls = [...new Set(urls)];
+    const promises = uniqueUrls.map((url) =>
       this.loadImage(url).catch((err) => {
         // Log but don't fail the entire prefetch
-        console.warn(`[BrowserAssetProvider] Prefetch failed for ${url}`);
+        console.warn(`[BrowserAssetProvider] Prefetch failed for ${url}`, err);
       }),
     );
     await Promise.all(promises);
@@ -117,7 +118,7 @@ export class BrowserAssetProvider implements IBrowserAssetProvider {
   /**
    * Clears the asset cache.
    */
-  clearCache(): void {
+  public clearCache(): void {
     this.cache.clear();
     this.pending.clear();
   }
@@ -125,7 +126,7 @@ export class BrowserAssetProvider implements IBrowserAssetProvider {
   /**
    * Helper method to register assets manually (useful for prototype/testing).
    */
-  registerAsset(
+  public registerAsset(
     sku: string,
     url: string,
     type: "sprite" | "mask" = "sprite",

@@ -1,0 +1,34 @@
+{
+  "name": "@vst/vocabulary-types",
+  "version": "1.0.0",
+  "description": "The shared language of the VST ecosystem: pure domain types and data contracts.",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "module": "./index.ts",
+  "files": [
+    "**/*.ts",
+    "**/*.md",
+    "!node_modules",
+    "!tsconfig.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "vst",
+    "retail",
+    "planogram",
+    "typescript",
+    "vocabulary",
+    "types"
+  ],
+  "author": "VST Interview Team",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

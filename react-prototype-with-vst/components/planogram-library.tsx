@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { dal } from "@/lib/vst/implementations/repositories/data-access";
-import { PlanogramConfig } from "@/lib/vst/types/planogram/config";
+import { PlanogramConfig } from "@vst/vocabulary-types";
 import { PlanogramReadOnlyPreview } from "@/components/publisher/planogram-readonly-preview";
 
 export function PlanogramLibrary() {

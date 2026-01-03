@@ -3,11 +3,14 @@ import {
   IVstRenderer,
   RenderEngineConfig,
   RenderProjection,
-} from "../../types/rendering/engine";
-import { RenderInstance } from "../../types/rendering/instance";
-import { FixtureConfig, ShelfConfig } from "../../types/planogram/config";
-import { Vector2, Vector3 } from "../../types/core/geometry";
-import { IBrowserAssetProvider } from "../../types/repositories/providers";
+  RenderInstance,
+  FixtureConfig,
+  ShelfConfig,
+  Vector2,
+  Vector3,
+  IAssetProvider as IBrowserAssetProvider,
+} from "@vst/vocabulary-types";
+import { isShelfSurfacePosition } from "@vst/utils";
 import { LabelUtils } from "./shared/label-utils";
 import { ShopperCameraInput } from "./shared/shopper-camera-input";
 
@@ -76,7 +79,6 @@ export class BabylonRenderer implements IVstRenderer {
       inst.worldPosition.y + inst.worldDimensions.height / 2,
       // inst.worldPosition.z, // 0 usually
       inst.worldPosition.z + inst.worldDimensions.depth / 2,
-
     );
 
     // Calculate desired camera position
@@ -85,11 +87,7 @@ export class BabylonRenderer implements IVstRenderer {
     const currentZ = this.camera?.position.z ?? focusPoint.z - 1200;
 
     // Clamp X to aisle width (handled by constraints, but good to target correctly)
-    const targetPos = new BABYLON.Vector3(
-      focusPoint.x,
-      baselineY,
-      currentZ,
-    );
+    const targetPos = new BABYLON.Vector3(focusPoint.x, baselineY, currentZ);
 
     this.focusedState = {
       position: targetPos,
@@ -209,7 +207,8 @@ export class BabylonRenderer implements IVstRenderer {
     instances.forEach((inst) => this.instanceMap.set(inst.id, inst));
 
     // Update Camera based on projection/fixture if it's the first render or fixture changed
-    if (fixtureChanged || this.camera?.radius === 1000) {
+    // UniversalCamera doesn't have radius, so just check if it's new
+    if (fixtureChanged) {
       this.setupCamera(fixture);
     }
 
@@ -308,20 +307,20 @@ export class BabylonRenderer implements IVstRenderer {
 
     // 1. Clamp Rotation (Head Tilt)
     // Look up/down limit (+/- 80 deg) - Relaxed for top/bottom shelves
-      // this.camera.rotation.x = BABYLON.Scalar.Clamp(
-      //   this.camera.rotation.x,
-      //   -Math.PI / 2.2,
-      //   Math.PI / 2.2,
-      // );
-      const target = this.camera.getTarget();
+    // this.camera.rotation.x = BABYLON.Scalar.Clamp(
+    //   this.camera.rotation.x,
+    //   -Math.PI / 2.2,
+    //   Math.PI / 2.2,
+    // );
+    const target = this.camera.getTarget();
 
-      const minTargetY = 200; // bottom shelf comfort
-      const maxTargetY = this.currentFixture
-        ? this.currentFixture.dimensions.height + 200
-        : 3000;
+    const minTargetY = 200; // bottom shelf comfort
+    const maxTargetY = this.currentFixture
+      ? this.currentFixture.dimensions.height + 200
+      : 3000;
 
-      target.y = BABYLON.Scalar.Clamp(target.y, minTargetY, maxTargetY);
-      this.camera.setTarget(target);
+    target.y = BABYLON.Scalar.Clamp(target.y, minTargetY, maxTargetY);
+    this.camera.setTarget(target);
 
     // 2. Clamp Position
     // Z (Depth): -5000 (far) to -400 (close)
@@ -537,11 +536,10 @@ export class BabylonRenderer implements IVstRenderer {
   ) {
     if (!this.scene) return;
 
-    const shelfInstances = this.currentInstances.filter(
-      (inst) =>
-        inst.semanticCoordinates.model === "shelf-surface" &&
-        inst.semanticCoordinates.shelfIndex === index,
-    );
+    const shelfInstances = this.currentInstances.filter((inst) => {
+      const pos = inst.semanticCoordinates;
+      return isShelfSurfacePosition(pos) && pos.shelfIndex === index;
+    });
 
     let shelfSpaceUsed = 0;
     shelfInstances.forEach((inst) => {
@@ -797,7 +795,11 @@ export class BabylonRenderer implements IVstRenderer {
         // Create Mesh
         mesh = BABYLON.MeshBuilder.CreatePlane(
           `label_${key}`,
-          { width: groupWidth, height: railHeight, sideOrientation: BABYLON.Mesh.DOUBLESIDE },
+          {
+            width: groupWidth,
+            height: railHeight,
+            sideOrientation: BABYLON.Mesh.DOUBLESIDE,
+          },
           this.scene,
         );
         mesh.metadata = { width: groupWidth };

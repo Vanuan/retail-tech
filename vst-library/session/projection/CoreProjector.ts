@@ -1,42 +1,49 @@
 import {
-  IPlanogramProjector,
   PlanogramConfig,
-  PlanogramAction,
-  PlanogramSnapshot,
   RenderInstance,
   ValidationResult,
   ProductMetadata,
   SemanticPosition,
   FacingConfig,
-  SourceProduct
-} from "@vst/types";
+  SourceProduct,
+} from "@vst/vocabulary-types";
+import {
+  IPlanogramProjector,
+  PlanogramAction,
+  PlanogramSnapshot,
+} from "@vst/session-types";
+import { CoreLayerProcessor } from "@vst/core-processing";
 
 /**
  * Default implementation of the Projector.
- * Applies Flux-like actions to a base PlanogramConfig and (simulates) the projection
- * to RenderInstances.
+ * Applies Flux-like actions to a base PlanogramConfig and projects
+ * to RenderInstances using the CoreLayerProcessor.
  */
 export class CoreProjector implements IPlanogramProjector {
+  private processor: CoreLayerProcessor;
 
-  /**
-   * core-processing dependencies would be injected here in a real app.
-   * For this implementation, we will simulate the L4 projection.
-   */
-  constructor() {}
+  constructor(processor: CoreLayerProcessor) {
+    this.processor = processor;
+  }
 
   public async project(
     base: PlanogramConfig,
-    actions: PlanogramAction[]
+    actions: PlanogramAction[],
   ): Promise<PlanogramSnapshot> {
     // 1. Apply Actions to derive new L1 Config (The "Reducer")
     const derivedConfig = this.applyActions(base, actions);
 
-    // 2. Project L1 -> L4 (Render Instances)
-    // In the full system, this delegates to ProductInstanceGenerator/Positioners
-    const renderInstances = await this.generateRenderInstances(derivedConfig);
+    // 2. Project L1 -> L4 (Render Instances) using the Core Processor
+    const processed = await this.processor.processPlanogram(derivedConfig);
+    const renderInstances = processed.renderInstances;
 
-    // 3. Run Validation
-    const validation = this.validate(derivedConfig, renderInstances);
+    // 3. Construct Validation Result from processing metadata
+    const validation: ValidationResult = {
+      valid: processed.metadata.invalidCount === 0,
+      canRender: renderInstances.length > 0,
+      errors: (processed.metadata.processingErrors || []) as any[],
+      warnings: [],
+    };
 
     // 4. Build Indices for fast lookup
     const indices = this.buildIndices(renderInstances);
@@ -52,95 +59,121 @@ export class CoreProjector implements IPlanogramProjector {
         timestamp: Date.now(),
         // selection would be handled by the store
       },
-      indices
+      indices,
     };
   }
 
   /**
    * The "Reducer" logic: (State, Actions) => NewState
    */
-  private applyActions(base: PlanogramConfig, actions: PlanogramAction[]): PlanogramConfig {
+  private applyActions(
+    base: PlanogramConfig,
+    actions: PlanogramAction[],
+  ): PlanogramConfig {
     // Deep clone to ensure immutability (naive implementation for this exercise)
     const config: PlanogramConfig = JSON.parse(JSON.stringify(base));
+
+    let currentConfig = config;
 
     for (const action of actions) {
       switch (action.type) {
         case "PRODUCT_MOVE":
-          this.applyMove(config, action.productId, action.to);
+          currentConfig = this.applyMove(
+            currentConfig,
+            action.productId,
+            action.to,
+          );
           break;
         case "PRODUCT_ADD":
-          this.applyAdd(config, action.product);
+          currentConfig = this.applyAdd(currentConfig, action.product);
           break;
         case "PRODUCT_REMOVE":
-          this.applyRemove(config, action.productId);
+          currentConfig = this.applyRemove(currentConfig, action.productId);
           break;
         case "PRODUCT_FACINGS":
-          this.applyFacings(config, action.productId, action.facings);
+          currentConfig = this.applyFacings(
+            currentConfig,
+            action.productId,
+            action.facings,
+          );
           break;
         case "FIXTURE_UPDATE":
-          if (config.fixture) {
-             config.fixture.config = { ...config.fixture.config, ...action.config };
-          }
+          currentConfig = {
+            ...currentConfig,
+            fixture: {
+              ...currentConfig.fixture,
+              config: {
+                ...currentConfig.fixture.config,
+                ...action.config,
+              },
+            },
+          };
           break;
       }
     }
 
-    return config;
+    return currentConfig;
   }
 
-  private applyMove(config: PlanogramConfig, productId: string, to: SemanticPosition) {
-    const product = config.products.find(p => p.id === productId);
-    if (product) {
-      product.placement.coordinates = to;
-    }
-  }
-
-  private applyAdd(config: PlanogramConfig, product: SourceProduct) {
-    // Ensure uniqueness or handle replacement strategies here
-    config.products.push(product);
-  }
-
-  private applyRemove(config: PlanogramConfig, productId: string) {
-    config.products = config.products.filter(p => p.id !== productId);
-  }
-
-  private applyFacings(config: PlanogramConfig, productId: string, facings: FacingConfig) {
-    const product = config.products.find(p => p.id === productId);
-    if (product) {
-      product.placement.facings = facings;
-    }
-  }
-
-  /**
-   * Simulates the projection from Config to RenderInstances.
-   * This bridges the gap between the Session layer and the Core Processing layer.
-   */
-  private async generateRenderInstances(config: PlanogramConfig): Promise<RenderInstance[]> {
-    // In a real integration, this would call:
-    // return Promise.all(config.products.map(p => this.instanceGenerator.process(..., p)));
-
-    // For this structural layer, we map roughly
-    return config.products.map(p => {
-        // We cast this because constructing a full RenderInstance requires
-        // the heavy logic from core-processing (dimensions, scaling, etc.)
-        return {
-            id: p.id,
-            sourceData: p,
-            // Mocking required fields to satisfy the type for the snapshot
-            metadata: { sku: p.sku } as any,
-            renderBounds: { x: 0, y: 0, width: 0, height: 0 },
-            renderCoordinates: { x: 0, y: 0, scale: 1 }
-        } as unknown as RenderInstance;
-    });
-  }
-
-  private validate(config: PlanogramConfig, instances: RenderInstance[]): ValidationResult {
-    // Mock validation result
+  private applyMove(
+    config: PlanogramConfig,
+    productId: string,
+    to: SemanticPosition,
+  ): PlanogramConfig {
     return {
-      valid: true,
-      canRender: true,
-      errors: [],
-      warnings: []
+      ...config,
+      products: config.products.map((p) =>
+        p.id === productId
+          ? {
+              ...p,
+              placement: {
+                ...p.placement,
+                position: to,
+              },
+            }
+          : p,
+      ),
+    };
+  }
+
+  private applyAdd(
+    config: PlanogramConfig,
+    product: SourceProduct,
+  ): PlanogramConfig {
+    return {
+      ...config,
+      products: [...config.products, product],
+    };
+  }
+
+  private applyRemove(
+    config: PlanogramConfig,
+    productId: string,
+  ): PlanogramConfig {
+    return {
+      ...config,
+      products: config.products.filter((p) => p.id !== productId),
+    };
+  }
+
+  private applyFacings(
+    config: PlanogramConfig,
+    productId: string,
+    facings: FacingConfig,
+  ): PlanogramConfig {
+    return {
+      ...config,
+      products: config.products.map((p) =>
+        p.id === productId
+          ? {
+              ...p,
+              placement: {
+                ...p.placement,
+                facings: facings,
+              },
+            }
+          : p,
+      ),
     };
   }
 

@@ -1,7 +1,14 @@
-import { Vector2, Vector3 } from "../types/core/geometry";
-import { RenderProjection, Viewport } from "../types/rendering/engine";
-import { RenderInstance } from "../types/rendering/instance";
-import { FixtureConfig } from "../types/planogram/config";
+import {
+  Vector2,
+  Vector3,
+  RenderProjection,
+  Viewport,
+  RenderInstance,
+  FixtureConfig,
+  ShelfSurfacePosition,
+  PegboardGridPosition,
+  BasketBinPosition,
+} from "@vst/vocabulary-types";
 import { Projection } from "../implementations/projection";
 
 /**
@@ -225,11 +232,13 @@ export class ViewportController {
 
     switch (sc.model) {
       case "shelf-surface":
-        return `${baseKey}:shelf:${sc.shelfIndex}`;
-      case "pegboard-grid":
-        return `${baseKey}:peg:${sc.holeX}:${sc.holeY}`;
+        return `${baseKey}:shelf:${(sc as ShelfSurfacePosition).shelfIndex}`;
+      case "pegboard-grid": {
+        const p = sc as PegboardGridPosition;
+        return `${baseKey}:peg:${p.holeX}:${p.holeY}`;
+      }
       case "basket-bin":
-        return `${baseKey}:bin:${sc.containerId}`;
+        return `${baseKey}:bin:${(sc as BasketBinPosition).containerId}`;
       default:
         return baseKey;
     }

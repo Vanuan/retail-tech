@@ -1,4 +1,4 @@
-import { PyramidConfig, RenderInstance, Vector3 } from "../types/index";
+import { PyramidConfig, RenderInstance, Vector3 } from "@vst/vocabulary-types";
 
 /**
  * PYRAMID BUILDER (Layer 3)

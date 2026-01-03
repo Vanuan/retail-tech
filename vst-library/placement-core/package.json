@@ -1,0 +1,35 @@
+{
+  "name": "@vst/placement-core",
+  "version": "1.0.0",
+  "description": "Core interfaces and registry for VST placement models.",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "module": "./index.ts",
+  "files": [
+    "**/*.ts",
+    "**/*.md",
+    "!node_modules",
+    "!tsconfig.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "vst",
+    "placement",
+    "coordinates",
+    "transform"
+  ],
+  "author": "VST Interview Team",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@vst/vocabulary-types": "1.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

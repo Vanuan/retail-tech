@@ -2,7 +2,10 @@
 
 import { ReactNode } from "react";
 import { PlanogramDataProvider } from "./planogram-data-context";
-import { PlanogramEditorProvider, usePlanogram as useEditorPlanogram } from "./planogram-editor-context";
+import {
+  PlanogramEditorProvider,
+  usePlanogram as useEditorPlanogram,
+} from "./planogram-editor-context";
 
 /**
  * Legacy PlanogramProvider wrapper.
@@ -18,9 +21,7 @@ export function PlanogramProvider({
 }) {
   return (
     <PlanogramDataProvider planogramId={planogramId || undefined}>
-      <PlanogramEditorProvider>
-        {children}
-      </PlanogramEditorProvider>
+      <PlanogramEditorProvider>{children}</PlanogramEditorProvider>
     </PlanogramDataProvider>
   );
 }
@@ -35,4 +36,4 @@ export type {
   SourceProduct,
   ProductMetadata,
   RenderInstance,
-} from "./vst/types";
+} from "@vst/vocabulary-types";

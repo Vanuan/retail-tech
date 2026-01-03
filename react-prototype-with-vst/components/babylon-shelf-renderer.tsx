@@ -6,8 +6,11 @@ import { usePlanogramData } from "@/lib/planogram-data-context";
 import { PlanogramEditorContext } from "@/lib/planogram-editor-context";
 import { BabylonRenderer } from "@/lib/vst/implementations/renderers/babylon-renderer";
 import { dal } from "@/lib/vst/implementations/repositories/data-access";
-import { IBrowserAssetProvider } from "@/lib/vst/types/repositories/providers";
-import { PlanogramConfig, RenderInstance } from "@/lib/vst/types";
+import {
+  PlanogramConfig,
+  RenderInstance,
+  IAssetProvider as IBrowserAssetProvider,
+} from "@vst/vocabulary-types";
 
 interface BabylonShelfRendererProps {
   /** Optional override for config, otherwise uses context */

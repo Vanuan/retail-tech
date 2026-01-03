@@ -1,6 +1,9 @@
-import { Vector2, Vector3 } from "../types/core/geometry";
-import { RenderProjection } from "../types/rendering/engine";
-import { FixtureConfig } from "../types/planogram/config";
+import {
+  Vector2,
+  Vector3,
+  RenderProjection,
+  FixtureConfig,
+} from "@vst/vocabulary-types";
 
 /**
  * Projection Utility
@@ -20,7 +23,7 @@ export class Projection {
   static project(
     worldPoint: Vector3,
     fixture: FixtureConfig,
-    projection: RenderProjection
+    projection: RenderProjection,
   ): Vector2 {
     const { ppi, zoom, offset } = projection;
     const scale = ppi * zoom;
@@ -34,7 +37,7 @@ export class Projection {
 
     // 3. Apply Pan/Offset
     const screenX = pxX + offset.x;
-    const screenY = (fixtureHeightPx - pxY) + offset.y;
+    const screenY = fixtureHeightPx - pxY + offset.y;
 
     return { x: screenX, y: screenY };
   }
@@ -49,7 +52,7 @@ export class Projection {
   static unproject(
     screenPoint: Vector2,
     fixture: FixtureConfig,
-    projection: RenderProjection
+    projection: RenderProjection,
   ): Vector3 {
     const { ppi, zoom, offset } = projection;
     const scale = ppi * zoom;
@@ -66,7 +69,7 @@ export class Projection {
     return {
       x: relativeX / scale,
       y: pxY / scale,
-      z: 0 // Z-plane usually represents the front of the fixture in 2D
+      z: 0, // Z-plane usually represents the front of the fixture in 2D
     };
   }
 

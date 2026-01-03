@@ -1,4 +1,13 @@
-import { RenderInstance, ValidationResult } from "../types";
+import {
+  RenderInstance,
+  ValidationResult,
+  FixtureConfig,
+} from "@vst/vocabulary-types";
+import {
+  isShelfSurfacePosition,
+  isBasketBinPosition,
+} from "@vst/vocabulary-logic";
+import { IPlacementModel } from "@vst/placement-core";
 
 /**
  * VALIDATION RULES PROCESSOR
@@ -12,17 +21,21 @@ export class ValidationRulesProcessor {
    * @param instance The prepared render instance to validate.
    * @returns A ValidationResult object indicating validity, errors, and warnings.
    */
-  validate(instance: RenderInstance): ValidationResult {
+  validate(
+    instance: RenderInstance,
+    fixture: FixtureConfig,
+    placementModel: IPlacementModel,
+  ): ValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
 
     // Rule 1: Bounds validation - Ensure the product fits within the fixture.
-    if (!this.validateBounds(instance)) {
+    if (!this.validateBounds(instance, fixture)) {
       errors.push("Product bounds exceed fixture dimensions.");
     }
 
     // Rule 2: Shelf existence validation - Ensure the product is placed on a valid shelf.
-    if (!this.validateShelf(instance)) {
+    if (!this.validateShelf(instance, fixture, placementModel)) {
       errors.push("Invalid shelf index or shelf data missing.");
     }
 
@@ -55,10 +68,13 @@ export class ValidationRulesProcessor {
   /**
    * Checks if the product's calculated render bounds are within the fixture's dimensions.
    */
-  private validateBounds(instance: RenderInstance): boolean {
+  private validateBounds(
+    instance: RenderInstance,
+    fixture: FixtureConfig,
+  ): boolean {
     const bounds = instance.renderBounds;
-    const fixtureWidth = instance.fixture.dimensions.width;
-    const fixtureHeight = instance.fixture.dimensions.height;
+    const fixtureWidth = fixture.dimensions.width;
+    const fixtureHeight = fixture.dimensions.height;
 
     // Check if bounds are defined and are within the fixture's viewport.
     return (
@@ -75,20 +91,30 @@ export class ValidationRulesProcessor {
    * This is a basic check; a more robust implementation might query the fixture's
    * configuration for the exact number of available shelves.
    */
-  private validateShelf(instance: RenderInstance): boolean {
-    const shelfIndex = instance.semanticCoordinates?.shelfIndex;
-    const fixtureConfig = instance.fixture.config;
+  private validateShelf(
+    instance: RenderInstance,
+    fixture: FixtureConfig,
+    placementModel: IPlacementModel,
+  ): boolean {
+    const semanticPos = instance.semanticCoordinates;
+    const fixtureConfig = fixture.config;
 
     // Check if the placement model even uses shelves
-    const supportsShelves =
-      instance.placementModel?.properties?.supportsShelves ?? true;
+    const supportsShelves = placementModel.properties.supportsShelves;
     if (!supportsShelves) {
       return true;
     }
 
-    // If shelfIndex is missing, check if we have absolute Y as a valid alternative
+    let shelfIndex: number | undefined;
+    if (isShelfSurfacePosition(semanticPos)) {
+      shelfIndex = semanticPos.shelfIndex;
+    }
+
+    // If shelfIndex is missing, check if we have other valid positioning
     if (shelfIndex === undefined || shelfIndex === null) {
-      return instance.semanticCoordinates?.y !== undefined;
+      return (
+        isBasketBinPosition(semanticPos) || isShelfSurfacePosition(semanticPos)
+      );
     }
 
     // Ensure shelfIndex is a non-negative number.

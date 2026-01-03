@@ -34,7 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { dal } from "@/lib/vst/implementations/repositories/data-access";
-import { PlanogramConfig } from "@/lib/vst/types/planogram/config";
+import { PlanogramConfig } from "@vst/vocabulary-types";
 
 // Mock token data generator using real planograms
 const generateMockTokens = (planograms: PlanogramConfig[]) => {
@@ -46,8 +46,7 @@ const generateMockTokens = (planograms: PlanogramConfig[]) => {
   for (let i = 1; i <= 50; i++) {
     const sessionToken = Math.random().toString(36).substring(2, 15);
     const status = statuses[Math.floor(Math.random() * statuses.length)];
-    const planogram =
-      planograms[Math.floor(Math.random() * planograms.length)];
+    const planogram = planograms[Math.floor(Math.random() * planograms.length)];
 
     const createdAt = new Date(
       Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000,

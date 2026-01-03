@@ -5,9 +5,9 @@ import { usePlanogramData } from "@/lib/planogram-data-context";
 import { usePlanogram } from "@/lib/planogram-editor-context";
 import { TescoRenderer } from "@/lib/vst/implementations/renderers/tesco-renderer";
 import { dal } from "@/lib/vst/implementations/repositories/data-access";
-import { IBrowserAssetProvider } from "@/lib/vst/types/repositories/providers";
-import { RenderProjection } from "@/lib/vst/types/rendering/engine";
-import { RenderInstance } from "@/lib/vst/types/rendering/instance";
+import { IAssetProvider as IBrowserAssetProvider } from "@vst/vocabulary-types";
+import { RenderProjection } from "@vst/vocabulary-types";
+import { RenderInstance } from "@vst/vocabulary-types";
 import { Projection } from "@/lib/vst/implementations/projection";
 import { cn } from "@/lib/utils";
 
@@ -105,7 +105,9 @@ export function InteractivePlanogram2D({
   useEffect(() => {
     if (rendererRef.current) {
       rendererRef.current.setSelection(selectedProductId, null);
-      rendererRef.current.setSelectedShelf(selectedShelf?.index ?? null);
+      rendererRef.current.setSelectedShelf(
+        typeof selectedShelf === "number" ? selectedShelf : null,
+      );
     }
   }, [selectedProductId, selectedShelf]);
 

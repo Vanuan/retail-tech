@@ -3,20 +3,23 @@
  * Implementation of the standard shelf-based positioning strategy.
  */
 
-import { Vector2, Vector3 } from "../../types/core/geometry";
-import { Dimensions3D } from "../../types/core/dimensions";
 import {
+  Vector2,
+  Vector3,
+  Dimensions3D,
   SemanticPosition,
   ExpansionIdentifier,
   ShelfSurfacePosition,
-} from "../../types/coordinates/semantic";
-import { FixtureConfig } from "../../types/planogram/config";
+  FixtureConfig,
+  Millimeters,
+  ShelfIndex,
+  DepthLevel,
+} from "@vst/vocabulary-types";
 import {
   IPlacementModel,
   PlacementModelProperties,
-} from "../../types/placement-models/interface";
-import { isShelfSurfacePosition } from "../../types/coordinates/validators";
-import { Millimeters, ShelfIndex, DepthLevel } from "../../types/core/units";
+} from "@vst/placement-models";
+import { isShelfSurfacePosition } from "@vst/utils";
 
 export class ShelfSurfacePlacementModel implements IPlacementModel {
   public readonly id = "shelf-surface";
@@ -117,6 +120,6 @@ export class ShelfSurfacePlacementModel implements IPlacementModel {
       x: Math.max(0, worldPosition.x) as Millimeters,
       shelfIndex: closestShelfIndex as ShelfIndex,
       depth: depth as DepthLevel,
-    };
+    } as ShelfSurfacePosition;
   }
 }

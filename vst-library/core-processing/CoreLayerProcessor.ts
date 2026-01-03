@@ -3,9 +3,10 @@ import {
   ProcessedPlanogram,
   RenderInstance,
   IFixtureRepository,
-  IPlacementModelRegistry,
   IProductRepository,
-} from "../types/index";
+  FixtureConfig,
+} from "@vst/vocabulary-types";
+import { IPlacementModelRegistry, IPlacementModel } from "@vst/placement-core";
 import { ProductInstanceGenerator } from "./ProductInstanceGenerator";
 import { CorePerspectiveScaler } from "./CorePerspectiveScaler";
 import { CoreZLayerManager } from "./CoreZLayerManager";
@@ -28,7 +29,11 @@ export class CoreLayerProcessor {
   };
 
   private readonly processors: Array<{
-    process: (instance: any, ...args: any[]) => Promise<any>;
+    process: (
+      instance: RenderInstance,
+      fixture: FixtureConfig,
+      placementModel: IPlacementModel,
+    ) => Promise<RenderInstance>;
   }>;
   private readonly normalizer: InstanceNormalizer;
   private readonly validator: ValidationRulesProcessor;
@@ -117,11 +122,11 @@ export class CoreLayerProcessor {
             sku: product.sku,
             sourceData: product,
             fixture: fixtureDef,
-            placementModel: placementModel,
+            placementModelId: placementModel.id,
             registries: this.registries,
           } as any,
           fixtureDef,
-          placementModel,
+          placementModel as any, // Cast to any to bypass strict behavioral checks in template generator
         );
 
         // Step 2: Expand template into multiple instances (Layer 3 expansion: Facings & Pyramids)
@@ -135,12 +140,16 @@ export class CoreLayerProcessor {
               currentInstance = await processor.process(
                 currentInstance,
                 fixtureDef,
-                placementModel,
+                placementModel as any,
               );
             }
 
             // PHASE 3: Validate the final prepared instance
-            const validationResult = this.validator.validate(currentInstance);
+            const validationResult = this.validator.validate(
+              currentInstance,
+              fixtureDef,
+              placementModel,
+            );
             if (validationResult.valid) {
               renderInstances.push(currentInstance);
             } else {
@@ -170,7 +179,6 @@ export class CoreLayerProcessor {
           error.message,
         );
         processingErrors.push({ id: productId, error: error.message });
-        // Depending on requirements, you might want to halt processing or continue
       }
     }
 

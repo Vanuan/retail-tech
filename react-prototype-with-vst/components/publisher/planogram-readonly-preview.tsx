@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { PlanogramConfig } from "@/lib/vst/types";
-import { RenderProjection } from "@/lib/vst/types/rendering/engine";
+import {
+  PlanogramConfig,
+  RenderProjection,
+  IAssetProvider as IBrowserAssetProvider,
+} from "@vst/vocabulary-types";
 import { TescoRenderer } from "@/lib/vst/implementations/renderers/tesco-renderer";
 import { dal } from "@/lib/vst/implementations/repositories/data-access";
-import { IBrowserAssetProvider } from "@/lib/vst/types/repositories/providers";
 import {
   PlanogramDataProvider,
   usePlanogramData,

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { PlanogramSnapshot, PlanogramAction } from "@vst/types";
+import { PlanogramSnapshot, PlanogramAction } from "@vst/session-types";
 import { SessionStore } from "../store/SessionStore";
 
 export interface UsePlanogramSessionResult {
@@ -18,10 +18,12 @@ export interface UsePlanogramSessionResult {
  *
  * @param store The SessionStore instance to subscribe to.
  */
-export function usePlanogramSession(store: SessionStore): UsePlanogramSessionResult {
+export function usePlanogramSession(
+  store: SessionStore,
+): UsePlanogramSessionResult {
   // Sync React state with the Store's current snapshot
   const [snapshot, setSnapshot] = useState<PlanogramSnapshot | null>(
-    store.currentSnapshot
+    store.currentSnapshot,
   );
 
   useEffect(() => {
@@ -46,7 +48,7 @@ export function usePlanogramSession(store: SessionStore): UsePlanogramSessionRes
     async (action: PlanogramAction) => {
       await store.dispatch(action);
     },
-    [store]
+    [store],
   );
 
   const undo = useCallback(async () => {

@@ -12,14 +12,14 @@ import {
   IProductRepository,
   IFixtureRepository,
   IPlanogramRepository,
-  IPlacementModelRegistry,
   ProductMetadata,
-} from "../types";
+} from "@vst/vocabulary-types";
+import { IPlacementModelRegistry } from "@vst/placement-core";
+
 import { BrowserAssetProvider } from "./BrowserAssetProvider";
 import { ProductRepository } from "./ProductRepository";
 import { FixtureRepository } from "./FixtureRepository";
 import { PlanogramRepository } from "./PlanogramRepository";
-import { PlacementModelRegistry } from "./PlacementModelRegistry";
 
 export * from "./BrowserAssetProvider";
 export * from "./ProductRepository";
@@ -35,16 +35,17 @@ export class DataAccessLayer implements IDataAccessLayer {
   public readonly products: ProductRepository;
   public readonly fixtures: FixtureRepository;
   public readonly planograms: PlanogramRepository;
-  public readonly placementModels: PlacementModelRegistry;
 
-  constructor() {
+  constructor(options: { config?: { cdnBaseUrl: string } } = {}) {
     this.assets = new BrowserAssetProvider();
     this.products = new ProductRepository();
     this.fixtures = new FixtureRepository();
     this.planograms = new PlanogramRepository();
-    this.placementModels = new PlacementModelRegistry();
   }
 
+  /**
+   * Initializes the data layer by loading core entities and registering assets.
+   */
   async initialize(): Promise<void> {
     await this.products.initialize();
     await this.fixtures.initialize();
@@ -75,6 +76,9 @@ export class DataAccessLayer implements IDataAccessLayer {
     );
   }
 
+  /**
+   * Convenience method to get metadata and resolve all assets.
+   */
   async resolveFullProduct(sku: string): Promise<ProductMetadata | null> {
     const meta = await this.products.getBySku(sku);
     if (!meta) return null;
@@ -84,6 +88,9 @@ export class DataAccessLayer implements IDataAccessLayer {
     return meta;
   }
 
+  /**
+   * Cleanup resources.
+   */
   destroy(): void {
     this.assets.clearCache();
   }

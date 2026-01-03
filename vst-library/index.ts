@@ -2,15 +2,42 @@
  * VST LIBRARY - Core Entry Point
  *
  * This file consolidates the public API for the VST library, providing
- * access to domain types, data repositories, processing logic, and
- * the unified system facade.
+ * access to domain vocabulary, behavioral logic, data repositories,
+ * processing pipelines, and the unified system facade.
  */
 
-// Core Types & Interfaces
-export * from "./types";
+// ============================================================================
+// VOCABULARY & DOMAIN TYPES - The "Constitution" (L1-L4)
+// ============================================================================
+export * from "@vst/vocabulary-types";
 
-// Data Access Layer (Repositories & Providers)
+// ============================================================================
+// VOCABULARY LOGIC - Behavioral helpers (Validators & Factories)
+// ============================================================================
+export * from "@vst/vocabulary-logic";
+
+// ============================================================================
+// SESSION & STATE MANAGEMENT - Serializable actions, snapshots, and manager
+// ============================================================================
+export * from "@vst/session-types";
+export * from "@vst/session";
+
+// ============================================================================
+// PLACEMENT MODELS - Translation strategy protocols
+// ============================================================================
+export * from "@vst/placement-core";
+
+// ============================================================================
+// CORE PROCESSING - Stateless transformation pipeline
+// ============================================================================
+export * from "@vst/core-processing";
+
+// ============================================================================
+// DATA ACCESS LAYER - Repositories & Implementation
+// ============================================================================
 export * from "./data-access";
 
-// System Facade
-export * from "./CompleteSystem";
+// ============================================================================
+// SYSTEM FACADE - Orchestration
+// ============================================================================
+export { CompleteSystem } from "./CompleteSystem";

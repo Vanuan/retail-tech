@@ -2,13 +2,14 @@ import {
   IVstRenderer,
   RenderEngineConfig,
   RenderProjection,
-} from "../../types/rendering/engine";
-import { RenderInstance } from "../../types/rendering/instance";
-import { FixtureConfig } from "../../types/planogram/config";
-import { Vector2, Vector3 } from "../../types/core/geometry";
+  RenderInstance,
+  FixtureConfig,
+  Vector2,
+  Vector3,
+  IAssetProvider as IBrowserAssetProvider,
+  Pixels,
+} from "@vst/vocabulary-types";
 import { Projection } from "../projection";
-import { IBrowserAssetProvider } from "../../types/repositories/providers";
-import { Pixels } from "../../types/core/units";
 import { LabelUtils } from "./shared/label-utils";
 
 /**

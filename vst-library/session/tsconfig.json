@@ -3,15 +3,12 @@
     "target": "ES2020",
     "module": "ESNext",
     "moduleResolution": "node",
-    "lib": [
-      "ES2020",
-      "DOM"
-    ],
+    "lib": ["ES2020", "DOM"],
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./",
+    "rootDir": "../",
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -20,18 +17,12 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@vst/types": [
-        "../types/index.ts"
-      ]
+      "@vst/vocabulary-types": ["../vocabulary-types/index.ts"],
+      "@vst/session-types": ["../session-types/index.ts"],
+      "@vst/core-processing": ["../core-processing/index.ts"],
     },
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ]
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "dist"],
 }

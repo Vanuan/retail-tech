@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, Trash2, ListRestart } from "lucide-react";
-import { Millimeters, ShelfConfig } from "@/lib/vst/types";
+import { Millimeters, ShelfConfig } from "@vst/vocabulary-types";
 
 export function ShelfPanel() {
   const {
@@ -33,7 +33,7 @@ export function ShelfPanel() {
       shelves.length > 0
         ? Math.max(...shelves.map((s) => s.baseHeight as number))
         : -400;
-    addShelf((lastShelfHeight + 400) as Millimeters);
+    addShelf();
   };
 
   const handleUpdateHeight = (index: number, newHeight: number) => {

@@ -5,9 +5,16 @@ import {
   Viewport,
   RenderResult,
   EditingState,
-} from "./types/index";
-import { CoreLayerProcessor } from "./core-processing/CoreLayerProcessor";
-import { DataAccessLayer } from "./data-access";
+} from "@vst/vocabulary-types";
+import {
+  PlanogramSnapshot,
+  PlanogramAction,
+  ISessionManager,
+} from "@vst/session-types";
+import { IPlacementModelRegistry } from "@vst/placement-core";
+import { CoreLayerProcessor } from "@vst/core-processing";
+import { SessionStore, CoreProjector } from "@vst/session";
+import { DataAccessLayer, PlacementModelRegistry } from "./data-access";
 import { AtlasBuilder } from "./atlas-processing";
 import { PublisherRenderer } from "./renderer/contexts/PublisherRenderer";
 import { VisualizerRenderer } from "./renderer/contexts/VisualizerRenderer";
@@ -20,11 +27,13 @@ import { VSERenderer } from "./renderer/contexts/VSERenderer";
  * processing planogram data and rendering it to various targets (2D, 3D, Print).
  *
  * This class coordinates the flow between the stateless Core Processing Layer
- * and the stateful Renderer Layer.
+ * and the stateful Renderer Layer, and provides integration with session-based
+ * state management.
  */
 export class CompleteSystem {
   public readonly core: CoreLayerProcessor;
   public readonly data: IDataAccessLayer;
+  public readonly placementModels: IPlacementModelRegistry;
   public readonly atlas: AtlasBuilder;
 
   private renderers: {
@@ -34,15 +43,23 @@ export class CompleteSystem {
   };
 
   constructor(
-    options: { cdnBaseUrl: string } | { dataAccessLayer: IDataAccessLayer },
+    options:
+      | { cdnBaseUrl: string; placementModels?: IPlacementModelRegistry }
+      | {
+          dataAccessLayer: IDataAccessLayer;
+          placementModels: IPlacementModelRegistry;
+        },
   ) {
     // 1. Initialize Data Access Layer (Unified API for S3/DB)
     if ("dataAccessLayer" in options) {
       this.data = options.dataAccessLayer;
+      this.placementModels = options.placementModels;
     } else {
       this.data = new DataAccessLayer({
         config: { cdnBaseUrl: options.cdnBaseUrl },
       });
+      this.placementModels =
+        options.placementModels || new PlacementModelRegistry();
     }
 
     // 2. Initialize Atlas Pipeline (Context-aware texture packing)
@@ -51,11 +68,11 @@ export class CompleteSystem {
     // 3. Initialize Core Processor
     this.core = new CoreLayerProcessor(
       this.data.fixtures,
-      this.data.placementModels,
+      this.placementModels,
       this.data.products,
     );
 
-    // 3. Initialize specialized renderers
+    // 4. Initialize specialized renderers
     this.renderers = {
       publisher: new PublisherRenderer(),
       visualizer: new VisualizerRenderer(),
@@ -64,7 +81,7 @@ export class CompleteSystem {
   }
 
   /**
-   * Main entry point: Transforms and renders a planogram.
+   * Main entry point: Transforms and renders a planogram from raw configuration.
    * @param config Raw L1-L3 planogram configuration.
    * @param target The rendering context (Canvas, WebGL, etc).
    * @param viewport Viewport and zoom settings.
@@ -155,7 +172,47 @@ export class CompleteSystem {
   }
 
   /**
-   * Utility to update product metadata.
+   * Renders a planogram from a pre-processed session snapshot.
+   * This bypasses core processing and uses cached render instances.
+   */
+  public async renderSnapshot(
+    snapshot: PlanogramSnapshot,
+    target: any,
+    viewport: Viewport,
+    options: {
+      rendererType?: "publisher" | "visualizer" | "vse";
+      editingState?: EditingState;
+    } = {},
+  ): Promise<RenderResult> {
+    const rendererType = options.rendererType || "visualizer";
+    const renderer = this.renderers[rendererType];
+
+    if (!renderer) {
+      throw new Error(`Unsupported renderer type: ${rendererType}`);
+    }
+
+    // Wrap snapshot state into renderer-compatible format
+    const processedData: ProcessedPlanogram = {
+      renderInstances: snapshot.renderInstances,
+      fixture: snapshot.config.fixture,
+      metadata: {
+        totalInstances: snapshot.renderInstances.length,
+        validInstances: snapshot.renderInstances.length,
+        invalidCount: 0,
+        processingTime: 0,
+      },
+    };
+
+    return await renderer.render(
+      processedData,
+      target,
+      viewport,
+      options.editingState || null,
+    );
+  }
+
+  /**
+   * Utility to update product metadata in the repository.
    */
   public async updateMetadata(sku: string, metadata: any): Promise<void> {
     await this.data.products.save(metadata);
@@ -167,5 +224,14 @@ export class CompleteSystem {
    */
   public getRenderer(type: "publisher" | "visualizer" | "vse") {
     return this.renderers[type];
+  }
+
+  /**
+   * Creates a new stateful session for editing a planogram.
+   * This ties the session logic (history, projection) to the core processing engine.
+   */
+  public createSession(config: PlanogramConfig): ISessionManager {
+    const projector = new CoreProjector(this.core);
+    return new SessionStore(config, projector);
   }
 }

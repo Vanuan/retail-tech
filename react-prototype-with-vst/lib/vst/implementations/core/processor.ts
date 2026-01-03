@@ -5,13 +5,14 @@ import {
   SourceProduct,
   ProductMetadata,
   FixtureConfig,
-  isShelfSurfacePosition,
-  createFacingConfig,
   ZIndex,
   Millimeters,
   DepthCategory,
-} from "../../types";
-import { IDataAccessLayer } from "../../types/repositories/facade";
+  IDataAccessLayer,
+  ICoreProcessor,
+  CoreProcessInput,
+} from "@vst/vocabulary-types";
+import { isShelfSurfacePosition, createFacingConfig } from "@vst/utils";
 import { placementRegistry } from "../placement-models/registry";
 
 /**
@@ -19,13 +20,13 @@ import { placementRegistry } from "../placement-models/registry";
  * Implements the "L4" transformation layer.
  * Converts Semantic (L1) data into Render-Ready (L4) instances.
  */
-export class CoreProcessor {
+export class CoreProcessor implements ICoreProcessor {
   constructor(private dal: IDataAccessLayer) {}
 
   /**
-   * Process a planogram configuration into a render-ready result.
+   * Process a planogram configuration into a render-ready result (Async).
    */
-  async process(config: PlanogramConfig): Promise<ProcessedPlanogram> {
+  async processAsync(config: PlanogramConfig): Promise<ProcessedPlanogram> {
     // 1. Enrich (Fetch Metadata)
     // In a real implementation, this would use a batch loader or data loader pattern.
     const productSkus = new Set(config.products.map((p) => p.sku));
@@ -38,19 +39,15 @@ export class CoreProcessor {
       }
     }
 
-    return this.processSync(config, metadataMap);
+    return this.process({ config, metadata: metadataMap });
   }
 
   /**
-   * Synchronously process a planogram when metadata is already available.
-   * Useful for immediate updates in UI components when state changes.
+   * Core projection logic.
+   * Translates L1 + L3 into an L4 ProcessedPlanogram.
    */
-  processSync(
-    config: PlanogramConfig,
-    metadataSource:
-      | Map<string, ProductMetadata>
-      | Record<string, ProductMetadata>,
-  ): ProcessedPlanogram {
+  process(input: CoreProcessInput): ProcessedPlanogram {
+    const { config, metadata: metadataSource } = input;
     const startTime = performance.now();
     const renderInstances: RenderInstance[] = [];
     const processingErrors: any[] = [];
@@ -58,10 +55,7 @@ export class CoreProcessor {
     let invalidCount = 0;
 
     const getMetadata = (sku: string) => {
-      if (metadataSource instanceof Map) {
-        return metadataSource.get(sku);
-      }
-      return (metadataSource as Record<string, ProductMetadata>)[sku];
+      return metadataSource.get(sku);
     };
 
     // 2. Transform (L4 Generation)
@@ -171,7 +165,7 @@ export class CoreProcessor {
           sku: product.sku,
           sourceData: product,
           fixture: fixture,
-          placementModel: pModel,
+          placementModelId: pModel.id,
           metadata: metadata,
 
           physicalDimensions: metadata.dimensions.physical,

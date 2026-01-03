@@ -8,15 +8,7 @@ import { BabylonShelfRenderer } from "@/components/babylon-shelf-renderer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Clock,
-  CheckCircle2,
-  Loader2,
-  AlertCircle,
-  LayoutGrid,
-  Box,
-} from "lucide-react";
-import { ProductMetadata } from "@/lib/vst/types";
+import { Clock, Loader2, AlertCircle, LayoutGrid, Box } from "lucide-react";
 
 export interface ShelfExperienceResult {
   selectedProduct: { id: string; name: string } | null;

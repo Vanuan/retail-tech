@@ -1,4 +1,4 @@
-import { IBrowserAssetProvider } from "../../types/repositories/providers";
+import { IAssetProvider as IBrowserAssetProvider } from "@vst/vocabulary-types";
 
 /**
  * Browser implementation of IAssetProvider.

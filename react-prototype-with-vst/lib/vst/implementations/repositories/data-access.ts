@@ -3,10 +3,12 @@
  * Concrete implementations of repositories and the unified facade.
  */
 
-import { IDataAccessLayer } from "../../types/repositories/facade";
-import { IAssetProvider } from "../../types/repositories/providers";
-import { IPlacementModelRegistry } from "../../types/placement-models/registry";
-import { ProductMetadata } from "../../types/planogram/metadata";
+import {
+  IDataAccessLayer,
+  IAssetProvider,
+  ProductMetadata,
+} from "@vst/vocabulary-types";
+import { IPlacementModelRegistry } from "../placement-models/registry-interface";
 import { BrowserAssetProvider } from "./browser-asset-provider";
 import { placementRegistry } from "../placement-models/registry";
 import { ProductRepository } from "./product-repository";

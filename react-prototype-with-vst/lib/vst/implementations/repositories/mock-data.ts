@@ -5,8 +5,9 @@ import {
   ShelfIndex,
   PlanogramConfig,
   SourceProduct,
-  createFacingConfig,
-} from "@/lib/vst/types";
+  ShelfSurfacePosition,
+} from "@vst/vocabulary-types";
+import { createFacingConfig } from "@vst/utils";
 
 export const PRODUCT_CATALOG: Record<string, ProductMetadata> = {
   "COKE-001": {
@@ -174,7 +175,7 @@ export const MOCK_PRODUCTS: SourceProduct[] = [
         x: 50 as Millimeters,
         shelfIndex: 0 as ShelfIndex,
         depth: 0,
-      },
+      } as ShelfSurfacePosition,
       facings: createFacingConfig(3, 1),
     },
     pricing: { unitPrice: 1.5 },
@@ -188,7 +189,7 @@ export const MOCK_PRODUCTS: SourceProduct[] = [
         x: 250 as Millimeters,
         shelfIndex: 0 as ShelfIndex,
         depth: 0,
-      },
+      } as ShelfSurfacePosition,
       facings: createFacingConfig(2, 1),
     },
     pricing: { unitPrice: 1.45 },
@@ -202,7 +203,7 @@ export const MOCK_PRODUCTS: SourceProduct[] = [
         x: 50 as Millimeters,
         shelfIndex: 1 as ShelfIndex,
         depth: 0,
-      },
+      } as ShelfSurfacePosition,
       facings: createFacingConfig(4, 1),
     },
     pricing: { unitPrice: 1.0 },
@@ -216,7 +217,7 @@ export const MOCK_PRODUCTS: SourceProduct[] = [
         x: 50 as Millimeters,
         shelfIndex: 2 as ShelfIndex,
         depth: 0,
-      },
+      } as ShelfSurfacePosition,
       facings: createFacingConfig(2, 1),
     },
     pricing: { unitPrice: 2.2 },

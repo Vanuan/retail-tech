@@ -3,10 +3,13 @@ import {
   SourceProduct,
   FixtureConfig,
   ProductMetadata,
-  FacingData,
+  FacingConfig,
   PyramidConfig,
-  IPlacementModel,
-} from "../types";
+  FacingCount,
+  Millimeters,
+  ZIndex,
+} from "@vst/vocabulary-types";
+import { IPlacementModel } from "@vst/placement-core";
 
 /**
  * PRODUCT INSTANCE GENERATOR
@@ -21,7 +24,7 @@ export class ProductInstanceGenerator {
   async process(
     instance: Partial<RenderInstance>,
     fixture: FixtureConfig,
-    placementModel: IPlacementModel,
+    behavioralModel: IPlacementModel,
   ): Promise<RenderInstance> {
     const registries = (instance as any).registries;
     const sourceData = instance.sourceData as SourceProduct;
@@ -35,7 +38,6 @@ export class ProductInstanceGenerator {
     }
 
     // 2. Combine all data sources into the RenderInstance structure
-    // We cast to RenderInstance as this processor satisfies the base requirements
     return {
       ...instance,
       metadata,
@@ -46,16 +48,15 @@ export class ProductInstanceGenerator {
       anchorPoint: metadata.dimensions.visual.anchor,
 
       // Layer 2: Universal Representation (Coordinates & Constraints)
-      semanticCoordinates: sourceData.placement.coordinates,
-      // Default constraints to empty object if not provided
-      constraints: sourceData.placement.constraints || {},
+      semanticCoordinates: sourceData.placement.position,
+      placementModelId: behavioralModel.id,
 
       // Layer 3: Facings & Pyramid Logic
       facingData: this.extractFacingData(sourceData),
       pyramidData: this.extractPyramidData(sourceData),
 
       // Performance data for heatmaps
-      performance: sourceData.performance || null,
+      performance: sourceData.performance || undefined,
 
       // Asset references for the renderer
       assets: {
@@ -65,44 +66,42 @@ export class ProductInstanceGenerator {
       },
 
       // These will be populated by subsequent processors
+      fixture: fixture,
+      sku: sourceData.sku,
+      id: instance.id || `${sourceData.id}-0`,
+
       depthRatio: 0,
       renderScale: 1,
       scaledDimensions: { ...metadata.dimensions.physical },
+
+      worldPosition: { x: 0, y: 0, z: 0 },
+      worldRotation: { x: 0, y: 0, z: 0 },
+      worldDimensions: { ...metadata.dimensions.physical },
+
+      depthCategory: "front",
+      zIndex: 0,
+      zIndexComponents: {
+        shelf: 0,
+        facing: 0,
+        depth: 0,
+      },
       visualProperties: {
         isFrontRow: true,
         isMiddleRow: false,
         isBackRow: false,
         depthCategory: "front",
       },
-      zIndex: 0,
       zLayerProperties: {
-        baseZ: 0,
+        baseZ: 0 as ZIndex,
         shelfContribution: 0,
         facingContribution: 0,
         depthContribution: 0,
-        finalZIndex: 0,
+        finalZIndex: 0 as ZIndex,
       },
-      renderCoordinates: {
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-        baseline: { x: 0, y: 0 },
-        anchorPoint: metadata.dimensions.visual.anchor,
-        rotation: 0,
-        scale: 1,
-      },
-      renderBounds: { x: 0, y: 0, width: 0, height: 0, center: { x: 0, y: 0 } },
-      collisionBounds: {
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-        center: { x: 0, y: 0 },
-      },
+
       shadowProperties: {
         enabled: false,
-        type: "none",
+        type: "standard",
         intensity: 0,
         offset: { x: 0, y: 0 },
         blur: 0,
@@ -113,25 +112,21 @@ export class ProductInstanceGenerator {
         required: false,
         maskUrl: null,
         transparency: false,
-        maskType: "outline",
+        maskType: "alpha-channel",
         compositeOperation: "source-over",
       },
     } as RenderInstance;
   }
 
   /**
-   * Extracts facing count logic from source data.
+   * Extracts facing configuration from source data.
    */
-  private extractFacingData(product: SourceProduct): FacingData | null {
+  private extractFacingData(product: SourceProduct): FacingConfig | null {
     if (!product.placement.facings) return null;
 
-    const horizontal = product.placement.facings.horizontal || 1;
-    const vertical = product.placement.facings.vertical || 1;
-
     return {
-      horizontal,
-      vertical,
-      totalFacings: horizontal * vertical,
+      horizontal: product.placement.facings.horizontal || (1 as FacingCount),
+      vertical: product.placement.facings.vertical || (1 as FacingCount),
     };
   }
 

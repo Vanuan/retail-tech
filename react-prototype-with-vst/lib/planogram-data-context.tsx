@@ -13,7 +13,7 @@ import {
   PlanogramConfig,
   RenderInstance,
   ProductMetadata,
-} from "@/lib/vst/types";
+} from "@vst/vocabulary-types";
 import { CoreProcessor } from "@/lib/vst/implementations/core/processor";
 import { dal } from "@/lib/vst/implementations/repositories/data-access";
 
@@ -89,7 +89,7 @@ export function PlanogramDataProvider({
   const processConfig = useCallback(
     (cfg: PlanogramConfig, meta: Map<string, ProductMetadata>) => {
       try {
-        const result = processor.processSync(cfg, meta);
+        const result = processor.process({ config: cfg, metadata: meta });
         setRenderInstances(result.renderInstances);
       } catch (e) {
         console.error("Processing error", e);

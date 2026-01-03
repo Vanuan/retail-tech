@@ -12,7 +12,7 @@ import {
 } from "./types";
 import { MaxRectsPacker } from "./MaxRectsPacker";
 import { ValidationError } from "./errors";
-import { IAssetProvider } from "../types";
+import { IAssetProvider } from "@vst/vocabulary-types";
 
 /**
  * QUALITY PROFILES

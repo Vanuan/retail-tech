@@ -16,8 +16,11 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { dal } from "@/lib/vst/implementations/repositories/data-access";
-import { PlanogramConfig } from "@/lib/vst/types/planogram/config";
-import { ProductMetadata } from "@/lib/vst/types/planogram/metadata";
+import {
+  PlanogramConfig,
+  ProductMetadata,
+  SourceProduct,
+} from "@vst/vocabulary-types";
 import { PlanogramReadOnlyPreview } from "@/components/publisher/planogram-readonly-preview";
 import {
   VSTShelfExperience,
@@ -92,13 +95,15 @@ function ParticipantFlow() {
 
           // Fetch products metadata
           const uniqueSkus = Array.from(
-            new Set(config.products.map((p) => p.sku)),
+            new Set(config.products.map((p: SourceProduct) => p.sku)),
           );
           const metadata = await Promise.all(
-            uniqueSkus.map((sku) => dal.products.getBySku(sku)),
+            uniqueSkus.map((sku) => dal.products.getBySku(sku as string)),
           );
           setProductsMetadata(
-            metadata.filter((m): m is ProductMetadata => !!m),
+            metadata.filter(
+              (m: ProductMetadata | null): m is ProductMetadata => !!m,
+            ),
           );
         } else {
           setErrorMsg("Session not found");

@@ -5,13 +5,16 @@ import {
   SourceProduct,
   ProductMetadata,
   FixtureConfig,
-  isShelfSurfacePosition,
-  createFacingConfig,
   ZIndex,
   Millimeters,
   DepthCategory,
-} from "../types";
-import { IDataAccessLayer } from "../types/repositories/facade";
+} from "@vst/vocabulary-types";
+import {
+  isShelfSurfacePosition,
+  createFacingConfig,
+} from "@vst/vocabulary-logic";
+import { IDataAccessLayer } from "@vst/vocabulary-types";
+import { IPlacementModelRegistry } from "@vst/placement-core";
 
 /**
  * CoreProcessor
@@ -19,14 +22,16 @@ import { IDataAccessLayer } from "../types/repositories/facade";
  * Converts Semantic (L1) data into Render-Ready (L4) instances.
  */
 export class CoreProcessor {
-  constructor(private dal: IDataAccessLayer) {}
+  constructor(
+    private dal: IDataAccessLayer,
+    private placementModels: IPlacementModelRegistry,
+  ) {}
 
   /**
    * Process a planogram configuration into a render-ready result.
    */
   async process(config: PlanogramConfig): Promise<ProcessedPlanogram> {
     // 1. Enrich (Fetch Metadata)
-    // In a real implementation, this would use a batch loader or data loader pattern.
     const productSkus = new Set(config.products.map((p) => p.sku));
     const metadataMap = new Map<string, ProductMetadata>();
 
@@ -116,20 +121,24 @@ export class CoreProcessor {
     const instances: RenderInstance[] = [];
     const facings = product.placement.facings || createFacingConfig(1, 1);
 
-    // Get Placement Model
+    // Get Placement Model ID from semantic coordinates
     const modelType = product.placement.position.model;
-    const pModel =
-      this.dal.placementModels.get(modelType) ||
-      this.dal.placementModels.get("shelf-surface");
 
-    if (!pModel) {
-      throw new Error(`Placement model '${modelType}' not found`);
+    // We assume the registry provides access to the behavioral model implementation
+    const behavioralModel =
+      this.placementModels.get(modelType) ||
+      this.placementModels.get("shelf-surface");
+
+    if (!behavioralModel) {
+      throw new Error(
+        `Placement model '${modelType}' implementation not found`,
+      );
     }
 
     for (let facingX = 0; facingX < facings.horizontal; facingX++) {
       for (let facingY = 0; facingY < facings.vertical; facingY++) {
         // STEP 1 & 2: Facing Expansion & Transform
-        const worldPos = pModel.transform(
+        const worldPos = behavioralModel.transform(
           product.placement.position,
           fixture,
           metadata.dimensions.physical,
@@ -164,13 +173,15 @@ export class CoreProcessor {
         const depthCategory: DepthCategory =
           depth === 0 ? "front" : depth === 1 ? "middle" : "back";
 
-        // Create the RenderInstance
+        // Create the RenderInstance (L4)
         const instance: RenderInstance = {
           id: `${product.id}-${facingX}-${facingY}`,
           sku: product.sku,
           sourceData: product,
           fixture: fixture,
-          placementModel: pModel,
+
+          // Vocabulary uses ID string to avoid circular dependency with behavioral models
+          placementModelId: modelType,
           metadata: metadata,
 
           physicalDimensions: metadata.dimensions.physical,

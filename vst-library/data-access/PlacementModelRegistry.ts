@@ -1,30 +1,36 @@
+/**
+ * PLACEMENT MODEL REGISTRY
+ * Central lookup for all available translation strategies.
+ */
+
 import {
-  SemanticPosition,
-  FixtureConfig,
   Vector2,
   Vector3,
   Dimensions3D,
-  IPlacementModel,
-  IPlacementModelRegistry,
+  FixtureConfig,
+  SemanticPosition,
   ExpansionIdentifier,
-  isShelfSurfacePosition,
+} from "@vst/vocabulary-types";
+import {
   isPegboardGridPosition,
   isFreeform3DPosition,
-  createShelfSurfacePosition,
+  isBasketBinPosition,
   createPegboardGridPosition,
   createFreeform3DPosition,
-} from "../types";
+  createBasketBinPosition,
+} from "@vst/vocabulary-logic";
+import { IPlacementModel, IPlacementModelRegistry } from "@vst/placement-core";
 import { ShelfSurfacePlacementModel } from "./placement-models/ShelfSurfacePlacementModel";
 
 /**
- * PLACEMENT MODEL REPOSITORY
+ * PLACEMENT MODEL REGISTRY IMPLEMENTATION
  *
  * Manages available placement models that determine how products are spatially
  * organized within different types of fixtures.
  *
  * Architectural Positioning:
  * - Part of the Data Access Layer to provide a unified API for structural rules.
- * - Used by Core Layer Processing to calculate initial 3D positions.
+ * - Decoupled from vocabulary-types to allow for behavioral implementation.
  */
 export class PlacementModelRegistry implements IPlacementModelRegistry {
   private models: Map<string, IPlacementModel> = new Map();
@@ -45,7 +51,7 @@ export class PlacementModelRegistry implements IPlacementModelRegistry {
     // ========================================================================
     // PEGBOARD / GRID MODEL
     // ========================================================================
-    this.models.set("pegboard-grid", {
+    this.register({
       id: "pegboard-grid",
       name: "Pegboard / Slatwall",
       properties: {
@@ -54,10 +60,10 @@ export class PlacementModelRegistry implements IPlacementModelRegistry {
       },
       transform: (
         pos: SemanticPosition,
-        fixture: FixtureConfig,
-        productDims: Dimensions3D,
-        anchor: Vector2,
-        identifier?: ExpansionIdentifier,
+        _fixture: FixtureConfig,
+        _productDims: Dimensions3D,
+        _anchor: Vector2,
+        _identifier?: ExpansionIdentifier,
       ): Vector3 => {
         if (!isPegboardGridPosition(pos)) return { x: 0, y: 0, z: 0 };
 
@@ -72,7 +78,7 @@ export class PlacementModelRegistry implements IPlacementModelRegistry {
       },
       project: (
         worldPos: Vector3,
-        fixture: FixtureConfig,
+        _fixture: FixtureConfig,
       ): SemanticPosition => {
         const spacing = 25.4;
         return createPegboardGridPosition({
@@ -85,7 +91,7 @@ export class PlacementModelRegistry implements IPlacementModelRegistry {
     // ========================================================================
     // FREEFORM 3D MODEL
     // ========================================================================
-    this.models.set("freeform-3d", {
+    this.register({
       id: "freeform-3d",
       name: "Freeform 3D Placement",
       properties: {
@@ -94,20 +100,60 @@ export class PlacementModelRegistry implements IPlacementModelRegistry {
       },
       transform: (
         pos: SemanticPosition,
-        fixture: FixtureConfig,
-        productDims: Dimensions3D,
-        anchor: Vector2,
-        identifier?: ExpansionIdentifier,
+        _fixture: FixtureConfig,
+        _productDims: Dimensions3D,
+        _anchor: Vector2,
+        _identifier?: ExpansionIdentifier,
       ): Vector3 => {
         if (!isFreeform3DPosition(pos)) return { x: 0, y: 0, z: 0 };
         return { ...pos.position };
       },
       project: (
         worldPos: Vector3,
-        fixture: FixtureConfig,
+        _fixture: FixtureConfig,
       ): SemanticPosition => {
         return createFreeform3DPosition({
           position: worldPos,
+        });
+      },
+    });
+
+    // ========================================================================
+    // BASKET / BIN MODEL
+    // ========================================================================
+    this.register({
+      id: "basket-bin",
+      name: "Basket / Bin Container",
+      properties: {
+        supportsFacings: false,
+        supportsShelves: false,
+      },
+      transform: (
+        pos: SemanticPosition,
+        _fixture: FixtureConfig,
+        _productDims: Dimensions3D,
+        _anchor: Vector2,
+        _identifier?: ExpansionIdentifier,
+      ): Vector3 => {
+        if (!isBasketBinPosition(pos)) return { x: 0, y: 0, z: 0 };
+
+        // Basic implementation: slots are 100mm apart horizontally by default
+        const slotWidth = 100;
+        const x = pos.slotIndex * slotWidth + (pos.offset?.x || 0);
+        const y = pos.offset?.y || 0;
+        const z = 0;
+
+        return { x, y, z };
+      },
+      project: (
+        worldPos: Vector3,
+        _fixture: FixtureConfig,
+      ): SemanticPosition => {
+        const slotWidth = 100;
+        return createBasketBinPosition({
+          containerId: "default-bin",
+          slotIndex: Math.floor(worldPos.x / slotWidth),
+          offset: { x: worldPos.x % slotWidth, y: worldPos.y },
         });
       },
     });

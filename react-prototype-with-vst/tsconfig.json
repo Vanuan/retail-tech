@@ -1,10 +1,6 @@
 {
   "compilerOptions": {
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "target": "ES6",
     "skipLibCheck": true,
@@ -19,29 +15,25 @@
     "incremental": true,
     "plugins": [
       {
-        "name": "next"
-      }
+        "name": "next",
+      },
     ],
     "paths": {
-      "@/*": [
-        "./*"
+      "@/*": ["./*"],
+      "@vst/session": ["./lib/vst/session/index.ts"],
+      "@vst/vocabulary-types": ["../vst-library/vocabulary-types/index.ts"],
+      "@vst/utils": ["./lib/vst/utils/index.ts"],
+      "@vst/placement-models": [
+        "./lib/vst/implementations/placement-models/interface.ts",
       ],
-      "@vst/types": [
-        "./lib/vst/types/index.ts"
-      ],
-      "@vst/session": [
-        "./lib/vst/session/index.ts"
-      ]
-    }
+    },
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"],
 }

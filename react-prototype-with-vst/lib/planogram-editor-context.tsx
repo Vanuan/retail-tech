@@ -14,16 +14,19 @@ import {
   SourceProduct,
   ProductMetadata,
   ShelfConfig,
-  isShelfSurfacePosition,
   PlanogramConfig,
   ShelfIndex,
   Millimeters,
-  createFacingConfig,
   RenderInstance,
-} from "./vst/types";
+} from "@vst/vocabulary-types";
+import { isShelfSurfacePosition, createFacingConfig } from "@vst/utils";
 
 export type { RenderInstance };
-import { SessionStore, CoreProjector, usePlanogramSession } from "@vst/session";
+import {
+  SessionStore,
+  CoreSequenceRoller,
+  usePlanogramSession,
+} from "@vst/session";
 import { CoreProcessor } from "./vst/implementations/core/processor";
 import { dal } from "./vst/implementations/repositories/data-access";
 import { toast } from "sonner";
@@ -67,7 +70,7 @@ interface PlanogramEditorContextType {
 
   getShelfSpaceUsed: (
     shelfIndex: number,
-    products: SourceProduct[],
+    products: readonly SourceProduct[],
     ignoreProductId?: string,
   ) => number;
 
@@ -83,8 +86,12 @@ interface PlanogramEditorContextType {
 
   addShelf: () => void;
   removeShelf: (shelfIndex: number) => void;
-  updateShelf: (shelfIndex: number, updates: Partial<ShelfConfig>) => Promise<void>;
+  updateShelf: (
+    shelfIndex: number,
+    updates: Partial<ShelfConfig>,
+  ) => Promise<void>;
   reindexShelves: (shelves: ShelfConfig[]) => ShelfConfig[];
+  reindexShelvesAction: () => Promise<void>;
 
   // Data State
   renderInstances: RenderInstance[];
@@ -334,26 +341,11 @@ export function usePlanogram() {
     addProduct,
     removeProduct: editor.removeProduct,
     updateProduct,
-    addShelf: () => {
-      // old addShelf took baseHeight, new one calculates it.
-      // We can just call addShelf
-      editor.addShelf();
-    },
+    addShelf: editor.addShelf,
     removeShelf: editor.removeShelf,
     updateShelf: editor.updateShelf,
-    insertShelf: editor.addShelf, // simplified
-    reindexShelves: () => {
-      if (!fixture) return;
-      const currentShelves = (fixture.config.shelves as ShelfConfig[]) || [];
-      const newShelves = editor.reindexShelves(currentShelves);
-      data.updateConfig((prev) => ({
-        ...prev,
-        fixture: {
-          ...prev.fixture,
-          config: { ...prev.fixture.config, shelves: newShelves },
-        },
-      }));
-    },
+    insertShelf: editor.addShelf,
+    reindexShelves: editor.reindexShelvesAction,
 
     // Logic
     getShelfSpaceUsed,
@@ -384,37 +376,36 @@ export function PlanogramEditorProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { config, metadata, updateConfig, savePlanogram, setConfig, renderInstances: dataRenderInstances } =
-    usePlanogramData();
+  const {
+    config,
+    metadata,
+    updateConfig,
+    savePlanogram,
+    setConfig,
+    renderInstances: dataRenderInstances,
+  } = usePlanogramData();
 
   // --- Session Management ---
   const [sessionStore, setSessionStore] = useState<SessionStore | null>(null);
   const processor = useMemo(() => new CoreProcessor(dal), []);
-  const projector = useRef(new CoreProjector(processor, metadata));
+  const roller = useRef(new CoreSequenceRoller(processor, metadata));
 
-  // Keep projector dependencies in sync
+  // Keep roller dependencies in sync
   useEffect(() => {
-    const p = projector.current as any;
-    p.processor = processor;
-    p.metadata = metadata;
+    const r = roller.current as any;
+    r.processor = processor;
+    r.metadata = metadata;
   }, [processor, metadata]);
 
   // Initialize session store when config is loaded or changed
   useEffect(() => {
     if (config) {
-      setSessionStore(new SessionStore(config, projector.current));
+      setSessionStore(new SessionStore(config, roller.current));
     }
   }, [config?.id]);
 
-  const {
-    snapshot,
-    dispatch,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
-    isProjecting,
-  } = usePlanogramSession(sessionStore);
+  const { snapshot, dispatch, undo, redo, canUndo, canRedo, isProjecting } =
+    usePlanogramSession(sessionStore);
 
   // Sync session changes back to the data layer for persistence/rendering
   useEffect(() => {
@@ -533,7 +524,7 @@ export function PlanogramEditorProvider({
   const getShelfSpaceUsed = useCallback(
     (
       shelfIndex: number,
-      products: SourceProduct[],
+      products: readonly SourceProduct[],
       ignoreProductId?: string,
     ) => {
       const activeProducts = snapshot?.config.products || products;
@@ -713,63 +704,66 @@ export function PlanogramEditorProvider({
     [sessionStore],
   );
 
-  const addShelf = useCallback(() => {
-    updateConfig((prev) => {
-      const currentShelves =
-        (prev.fixture.config.shelves as ShelfConfig[]) || [];
-      const maxIdx = currentShelves.reduce(
-        (acc, s) => Math.max(acc, s.index),
-        -1,
-      );
-      const newShelf: ShelfConfig = {
-        id: generateId(),
-        index: (maxIdx + 1) as ShelfIndex,
-        baseHeight: 300 as Millimeters,
-      };
-      const newShelves = [...currentShelves, newShelf];
-      return {
-        ...prev,
-        fixture: {
-          ...prev.fixture,
-          config: {
-            ...prev.fixture.config,
-            shelves: newShelves,
-          },
-        },
-      };
+  const addShelf = useCallback(async () => {
+    if (!snapshot) return;
+    const currentShelves =
+      (snapshot.config.fixture.config.shelves as ShelfConfig[]) || [];
+    const maxIdx = currentShelves.reduce(
+      (acc, s) => Math.max(acc, s.index),
+      -1,
+    );
+    const maxHeight = currentShelves.reduce(
+      (acc, s) => Math.max(acc, s.baseHeight as number),
+      0,
+    );
+
+    const newShelf: ShelfConfig = {
+      id: generateId(),
+      index: (maxIdx + 1) as ShelfIndex,
+      baseHeight: (maxHeight + 300) as Millimeters,
+    };
+
+    await dispatch({
+      type: "FIXTURE_UPDATE",
+      config: {
+        shelves: [...currentShelves, newShelf],
+      },
     });
-  }, [updateConfig]);
+  }, [dispatch, snapshot]);
 
   const removeShelf = useCallback(
-    (index: number) => {
-      updateConfig((prev) => {
-        // Remove shelf
-        const currentShelves =
-          (prev.fixture.config.shelves as ShelfConfig[]) || [];
-        const shelves = currentShelves.filter((s) => s.index !== index);
+    async (index: number) => {
+      if (!snapshot) return;
+      const currentShelves =
+        (snapshot.config.fixture.config.shelves as ShelfConfig[]) || [];
+      const shelves = currentShelves.filter((s) => s.index !== index);
 
-        // Remove products on shelf
-        const products = prev.products.filter((p) => {
-          if (isShelfSurfacePosition(p.placement.position)) {
-            return p.placement.position.shelfIndex !== index;
-          }
-          return true;
-        });
-        return {
-          ...prev,
-          products,
-          fixture: {
-            ...prev.fixture,
-            config: {
-              ...prev.fixture.config,
-              shelves,
-            },
-          },
-        };
+      const actions: any[] = [
+        {
+          type: "FIXTURE_UPDATE",
+          config: { shelves },
+        },
+      ];
+
+      // Remove products on that shelf via individual actions or a batch if we supported it
+      // For now, the projector's applyRemove or similar logic is for products
+      snapshot.config.products.forEach((p: SourceProduct) => {
+        if (
+          isShelfSurfacePosition(p.placement.position) &&
+          p.placement.position.shelfIndex === index
+        ) {
+          actions.push({ type: "PRODUCT_REMOVE", productId: p.id });
+        }
       });
+
+      await dispatch({
+        type: "BATCH",
+        actions,
+      } as any);
+
       setSelectedShelf(null);
     },
-    [updateConfig],
+    [dispatch, snapshot],
   );
 
   const updateShelf = useCallback(
@@ -791,8 +785,47 @@ export function PlanogramEditorProvider({
   );
 
   const reindexShelves = useCallback((shelves: ShelfConfig[]) => {
-    return shelves.map((s, i) => ({ ...s, index: i as ShelfIndex }));
+    return shelves
+      .sort((a, b) => (a.baseHeight as number) - (b.baseHeight as number))
+      .map((s, i) => ({ ...s, index: i as ShelfIndex }));
   }, []);
+
+  const reindexShelvesAction = useCallback(async () => {
+    if (!snapshot) return;
+    const currentShelves =
+      (snapshot.config.fixture.config.shelves as ShelfConfig[]) || [];
+    const newShelves = reindexShelves(currentShelves);
+
+    // Map products to new indices based on height
+    const actions: any[] = [
+      {
+        type: "FIXTURE_UPDATE",
+        config: { shelves: newShelves },
+      },
+    ];
+
+    snapshot.config.products.forEach((p: SourceProduct) => {
+      if (isShelfSurfacePosition(p.placement.position)) {
+        const oldIndex = p.placement.position.shelfIndex;
+        const oldShelf = currentShelves.find((s) => s.index === oldIndex);
+        if (oldShelf) {
+          const newShelf = newShelves.find((s) => s.id === oldShelf.id);
+          if (newShelf && newShelf.index !== oldIndex) {
+            actions.push({
+              type: "PRODUCT_UPDATE",
+              productId: p.id,
+              to: { ...p.placement.position, shelfIndex: newShelf.index },
+            });
+          }
+        }
+      }
+    });
+
+    await dispatch({
+      type: "BATCH",
+      actions,
+    } as any);
+  }, [dispatch, snapshot, reindexShelves]);
 
   // --- Meta Actions ---
 
@@ -882,6 +915,7 @@ export function PlanogramEditorProvider({
     removeShelf,
     updateShelf,
     reindexShelves,
+    reindexShelvesAction,
     renderInstances,
     snapshot,
     undo,

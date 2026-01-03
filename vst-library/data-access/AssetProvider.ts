@@ -1,4 +1,4 @@
-import { IAssetProvider } from "../types/data-access";
+import { IAssetProvider } from "@vst/vocabulary-types";
 
 /**
  * ASSET PROVIDER
@@ -114,6 +114,13 @@ export class AssetProvider implements IAssetProvider {
   }
 
   /**
+   * Retrieves a loaded image from the cache synchronously.
+   */
+  public getLoadedImage(url: string): any {
+    return this.imageCache.get(url) || null;
+  }
+
+  /**
    * Batch pre-loads a set of assets.
    * Recommended to be called during Core Layer processing to warm the cache.
    */
@@ -127,5 +134,23 @@ export class AssetProvider implements IAssetProvider {
    */
   public clearCache(): void {
     this.imageCache.clear();
+  }
+
+  /**
+   * Helper method to register assets manually (useful for prototype/testing)
+   */
+  public registerAsset(
+    sku: string,
+    url: string,
+    type: "sprite" | "mask" = "sprite",
+  ): void {
+    // In a prototype environment, we often map a SKU directly to a URL
+    // ignoring the path resolution logic for simplicity.
+    const path =
+      type === "sprite"
+        ? `/products/${sku.toLowerCase()}/sprites/default_front.webp`
+        : `/products/${sku.toLowerCase()}/masks/main.png`;
+
+    this.mockStorage.set(path, url);
   }
 }

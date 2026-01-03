@@ -14,19 +14,28 @@ It bridges the gap between Layer 1 (Data) and Layer 4 (Render) by executing a pi
 
 ## Key Components
 
-### CoreProcessor (`CoreProcessor.ts`)
+### CoreLayerProcessor (`CoreLayerProcessor.ts`)
 
-The primary entry point. It orchestrates the transformation pipeline synchronously or asynchronously.
+The primary entry point. It orchestrates a decoupled transformation pipeline where individual processors (Scaling, Z-Layering, Positioning) operate on `RenderInstance` templates.
 
 ```typescript
-import { CoreProcessor } from '@vst/core-processing/CoreProcessor';
-import { dal } from '@vst/data-access';
+import { CoreLayerProcessor } from '@vst/core-processing';
+import { PlacementModelRegistry } from '@vst/data-access';
 
-const processor = new CoreProcessor(dal);
-const result = await processor.process(planogramConfig);
+// Typically initialized within CompleteSystem or with DAL components
+const processor = new CoreLayerProcessor(
+  dal.fixtures,
+  new PlacementModelRegistry(),
+  dal.products
+);
 
+const result = await processor.processPlanogram(planogramConfig);
 // result.renderInstances is now ready for the Renderer
 ```
+
+### CoreProcessor (`CoreProcessor.ts`)
+
+A legacy or higher-level orchestrator that provides a simplified API for synchronous and asynchronous processing by wrapping the DAL.
 
 ### Transformation Logic
 

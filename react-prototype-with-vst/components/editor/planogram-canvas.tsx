@@ -7,12 +7,14 @@ import {
   type RenderInstance,
 } from "@/lib/planogram-editor-context";
 import { dal } from "@/lib/vst/implementations/repositories/data-access";
-import { IBrowserAssetProvider } from "@/lib/vst/types/repositories/providers";
-import { createFacingConfig, FixtureConfig } from "@/lib/vst/types";
-import { ShelfSurfacePosition } from "@/lib/vst/types/coordinates/semantic";
-import { Millimeters } from "@/lib/vst/types/core/units";
-import type { ShelfConfig } from "@/lib/vst/types";
-import { IVstRenderer } from "@/lib/vst/types/rendering/engine";
+import {
+  IAssetProvider as IBrowserAssetProvider,
+  ShelfSurfacePosition,
+  Millimeters,
+  ShelfConfig,
+  IVstRenderer,
+} from "@vst/vocabulary-types";
+import { createFacingConfig } from "@vst/utils";
 import { placementRegistry } from "@/lib/vst/implementations";
 import { Canvas2DRenderer } from "@/lib/vst/implementations/renderers/canvas-2d";
 import { TescoRenderer } from "@/lib/vst/implementations/renderers/tesco-renderer";
@@ -44,7 +46,10 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragProductId, setDragProductId] = useState<string | null>(null);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
-  const [dragStartWorldOffset, setDragStartWorldOffset] = useState({ x: 0, y: 0 });
+  const [dragStartWorldOffset, setDragStartWorldOffset] = useState({
+    x: 0,
+    y: 0,
+  });
 
   const [isDraggingFacings, setIsDraggingFacings] = useState(false);
   const [facingsDragStartX, setFacingsDragStartX] = useState(0);
@@ -398,18 +403,25 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
 
     setLastMousePos({ x: mouseX, y: mouseY });
 
-    const worldPos = Projection.unproject({ x: mouseX, y: mouseY }, fixture!, viewport);
+    const worldPos = Projection.unproject(
+      { x: mouseX, y: mouseY },
+      fixture!,
+      viewport,
+    );
     const hit = snapshot?.indices.resolveWorldPoint(worldPos.x, worldPos.y);
 
     // 1. Check Facings Anchor
     const anchorHit = findHitAnchor(mouseX, mouseY, selectedProductId);
     if (anchorHit) {
-      const product =
-        snapshot?.indices.productById.get(selectedProductId!)?.sourceData;
+      const product = snapshot?.indices.productById.get(
+        selectedProductId!,
+      )?.sourceData;
       if (product) {
         setIsDraggingFacings(true);
         setFacingsDragStartX(mouseX);
-        setFacingsDragInitialFacings(product.placement.facings?.horizontal ?? 1);
+        setFacingsDragInitialFacings(
+          product.placement.facings?.horizontal ?? 1,
+        );
         return;
       }
     }
@@ -481,7 +493,8 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
     }
 
     if (isDraggingFacings && selectedProductId) {
-      const product = snapshot?.indices.productById.get(selectedProductId)?.sourceData;
+      const product =
+        snapshot?.indices.productById.get(selectedProductId)?.sourceData;
       if (product) {
         const metadata = productMetadata[product.sku];
         if (metadata) {
@@ -540,7 +553,8 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
     if (isDragging && dragProductId && fixture) {
       const projection = viewport;
 
-      const product = snapshot?.indices.productById.get(dragProductId)?.sourceData;
+      const product =
+        snapshot?.indices.productById.get(dragProductId)?.sourceData;
       const metadata = product ? productMetadata[product.sku] : null;
       const pModel =
         placementRegistry.get(fixture.placementModel) ||
@@ -548,7 +562,10 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
 
       if (product && metadata && pModel) {
         // Unproject the current mouse position
-        const currentWorldPos = renderer.current?.screenToWorld({ x: mouseX, y: mouseY }) || { x: 0, y: 0, z: 0 };
+        const currentWorldPos = renderer.current?.screenToWorld({
+          x: mouseX,
+          y: mouseY,
+        }) || { x: 0, y: 0, z: 0 };
 
         // Apply the original world-space offset to find the target semantic origin
         const targetWorldX = currentWorldPos.x - dragStartWorldOffset.x;
@@ -578,7 +595,7 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
           newPosition = {
             ...shelfPos,
             x: Math.max(0, Math.min(maxX, shelfPos.x)) as Millimeters,
-          };
+          } as ShelfSurfacePosition;
         }
 
         // Validate movement (Physics Restrictions)
@@ -607,7 +624,11 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
       return;
     }
 
-    const worldPos = Projection.unproject({ x: mouseX, y: mouseY }, fixture!, viewport);
+    const worldPos = Projection.unproject(
+      { x: mouseX, y: mouseY },
+      fixture!,
+      viewport,
+    );
     const hit = snapshot?.indices.resolveWorldPoint(worldPos.x, worldPos.y);
 
     // 1. Check Facings Anchor Hover
