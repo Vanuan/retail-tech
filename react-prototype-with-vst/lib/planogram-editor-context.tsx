@@ -18,11 +18,17 @@ import {
   ShelfIndex,
   Millimeters,
   RenderInstance,
+  SemanticPosition,
 } from "@vst/vocabulary-types";
 
 export type { RenderInstance };
 import { isShelfSurfacePosition, createFacingConfig } from "@vst/utils";
-import { usePlanogramSession, PlanogramSnapshot } from "@vst/session";
+import {
+  usePlanogramSession,
+  PlanogramSnapshot,
+  PlanogramActions,
+  PlanogramAction,
+} from "@vst/session";
 
 import { dal } from "./vst/implementations/repositories/data-access";
 import { toast } from "sonner";
@@ -155,6 +161,8 @@ export function PlanogramEditorProvider({
     canRedo,
     isProjecting,
     store: sessionStore,
+    suggestPlacement,
+    validateIntent,
   } = usePlanogramSession(config, metadata, dal);
 
   useEffect(() => {
@@ -286,127 +294,57 @@ export function PlanogramEditorProvider({
     refreshSavedPlanograms();
   }, [refreshSavedPlanograms]);
 
-  // --- Logic Helpers ---
-  const getShelfSpaceUsed = useCallback(
-    (shelfIndex: number) => {
-      let maxX = 0;
-      products.forEach((p) => {
-        const pos = p.placement.position;
-        if (isShelfSurfacePosition(pos) && pos.shelfIndex === shelfIndex) {
-          const meta = metadata?.get(p.sku);
-          const w =
-            (meta?.dimensions.physical.width || 0) *
-            (p.placement.facings?.horizontal || 1);
-          maxX = Math.max(maxX, pos.x + w);
-        }
-      });
-      return maxX;
-    },
-    [products, metadata],
-  );
-
-  const validatePlacement = useCallback(
-    (sku: string, position: any, facings: number, excludeId?: string) => {
-      if (!config || !metadata)
-        return { valid: false, error: "Missing context" };
-      if (!isShelfSurfacePosition(position)) return { valid: true };
-
-      const meta = metadata.get(sku);
-      if (!meta) return { valid: false, error: "No metadata" };
-
-      const width = meta.dimensions.physical.width * facings;
-      if (
-        position.x < 0 ||
-        position.x + width > config.fixture.dimensions.width
-      ) {
-        return { valid: false, error: "Out of bounds" };
-      }
-
-      const collision = products.some((p) => {
-        if (p.id === excludeId) return false;
-        const pPos = p.placement.position;
-        if (
-          !isShelfSurfacePosition(pPos) ||
-          pPos.shelfIndex !== position.shelfIndex
-        )
-          return false;
-
-        const pMeta = metadata.get(p.sku);
-        const pW =
-          (pMeta?.dimensions.physical.width || 0) *
-          (p.placement.facings?.horizontal || 1);
-        return (
-          position.x < pPos.x + pW - 0.5 && position.x + width > pPos.x + 0.5
-        );
-      });
-
-      return collision ? { valid: false, error: "Collision" } : { valid: true };
-    },
-    [config, metadata, products],
-  );
-
-  const findNextAvailablePosition = useCallback(
-    (sku: string, shelfIndex?: number) => {
-      if (!fixture || !metadata) return null;
-      const meta = metadata.get(sku);
-      if (!meta) return null;
-
-      const shelves = (fixture.config.shelves as ShelfConfig[]) || [];
-      const targetIndex = shelfIndex ?? selectedShelfState;
-
-      // Try target shelf, then all others
-      const checkOrder = [
-        targetIndex,
-        ...shelves.map((s) => s.index).filter((i) => i !== targetIndex),
-      ];
-
-      for (const idx of checkOrder) {
-        const used = getShelfSpaceUsed(idx);
-        if (used + meta.dimensions.physical.width <= fixture.dimensions.width) {
-          return { shelfIndex: idx, x: used, depth: 0 };
-        }
-      }
-      return null;
-    },
-    [fixture, metadata, getShelfSpaceUsed, selectedShelfState],
-  );
-
   // --- Convenience Mutations ---
   const addProduct = useCallback(
     async (sku: string, position?: any) => {
       const meta = metadata?.get(sku);
       if (!meta) return;
 
-      const pos = position || findNextAvailablePosition(sku);
-      if (!pos) {
-        toast.error("No space available");
-        return;
-      }
+      let targetPos = position;
 
-      const validation = validatePlacement(sku, pos, 1);
-      if (!validation.valid) {
-        toast.error(validation.error);
-        return;
-      }
-
-      await dispatch({
-        type: "PRODUCT_ADD",
-        product: {
-          id: uuidv4(),
+      // If no position provided, ask the Authority for a suggestion
+      if (!targetPos) {
+        const suggestion = suggestPlacement({
           sku,
-          placement: {
-            position: { model: "shelf-surface", ...pos },
-            facings: createFacingConfig(1, 1),
-          },
-        },
+          preferredShelf: selectedShelfState as ShelfIndex,
+        });
+
+        if (suggestion) {
+          targetPos = suggestion.position;
+        } else {
+          toast.error("No space available");
+          return;
+        }
+      }
+
+      // Handle partial positions (e.g. from simple UI drops)
+      if (targetPos && !targetPos.model) {
+        targetPos = { model: "shelf-surface", ...targetPos };
+      }
+
+      // Create the intent
+      const action = PlanogramActions.addProduct({
+        id: uuidv4(),
+        sku,
+        position: targetPos,
+        facings: createFacingConfig(1, 1),
       });
+
+      // Validate the intent with the Authority
+      const validation = validateIntent(action);
+      if (!validation.valid) {
+        toast.error(validation.errors[0]?.message || "Invalid placement");
+        return;
+      }
+
+      await dispatch(action);
     },
-    [metadata, findNextAvailablePosition, validatePlacement, dispatch],
+    [metadata, suggestPlacement, validateIntent, dispatch, selectedShelfState],
   );
 
   const removeProduct = useCallback(
     async (productId: string) => {
-      await dispatch({ type: "PRODUCT_REMOVE", productId });
+      await dispatch(PlanogramActions.removeProduct(productId));
     },
     [dispatch],
   );
@@ -417,12 +355,34 @@ export function PlanogramEditorProvider({
         silent && sessionStore
           ? sessionStore.dispatchSquashed.bind(sessionStore)
           : dispatch;
-      await method({
-        type: "PRODUCT_UPDATE",
-        productId: id,
-        to: updates.placement?.position,
-        facings: updates.placement?.facings,
-      });
+
+      const actions: PlanogramAction[] = [];
+
+      if (updates.placement?.position) {
+        actions.push(
+          PlanogramActions.moveProduct({
+            productId: id,
+            to: updates.placement.position,
+          }),
+        );
+      }
+
+      if (updates.placement?.facings) {
+        actions.push(
+          PlanogramActions.updateFacings({
+            productId: id,
+            facings: updates.placement.facings,
+          }),
+        );
+      }
+
+      if (actions.length === 0) return;
+
+      if (actions.length === 1) {
+        await method(actions[0]);
+      } else {
+        await method(PlanogramActions.batch(actions));
+      }
     },
     [dispatch, sessionStore],
   );
@@ -432,50 +392,39 @@ export function PlanogramEditorProvider({
     const maxIdx = current.reduce((m, s) => Math.max(m, s.index), -1);
     const maxH = current.reduce((m, s) => Math.max(m, s.baseHeight), 0);
 
-    await dispatch({
-      type: "FIXTURE_UPDATE",
-      config: {
-        shelves: [
-          ...current,
-          {
-            id: generateId(),
-            index: (maxIdx + 1) as ShelfIndex,
-            baseHeight: (maxH + 300) as Millimeters,
-          },
-        ],
-      },
-    });
+    await dispatch(
+      PlanogramActions.addShelf({
+        id: generateId(),
+        index: (maxIdx + 1) as ShelfIndex,
+        baseHeight: (maxH + 300) as Millimeters,
+      }),
+    );
   }, [dispatch, fixture]);
 
   const removeShelf = useCallback(
     async (index: number) => {
-      const current = (fixture?.config.shelves as ShelfConfig[]) || [];
-      const shelves = current.filter((s) => s.index !== index);
-      const actions: any[] = [{ type: "FIXTURE_UPDATE", config: { shelves } }];
+      const actions: PlanogramAction[] = [
+        PlanogramActions.removeShelf(index as ShelfIndex),
+      ];
+
       products.forEach((p) => {
         const pos = p.placement.position;
         if (isShelfSurfacePosition(pos) && pos.shelfIndex === index) {
-          actions.push({ type: "PRODUCT_REMOVE", productId: p.id });
+          actions.push(PlanogramActions.removeProduct(p.id));
         }
       });
-      await dispatch({ type: "BATCH", actions });
+      await dispatch(PlanogramActions.batch(actions));
     },
-    [dispatch, fixture, products],
+    [dispatch, products],
   );
 
   const updateShelf = useCallback(
     async (index: number, updates: Partial<ShelfConfig>) => {
-      const current = (fixture?.config.shelves as ShelfConfig[]) || [];
-      await dispatch({
-        type: "FIXTURE_UPDATE",
-        config: {
-          shelves: current.map((s) =>
-            s.index === index ? { ...s, ...updates } : s,
-          ),
-        },
-      });
+      await dispatch(
+        PlanogramActions.updateShelf({ index: index as ShelfIndex, updates }),
+      );
     },
-    [dispatch, fixture],
+    [dispatch],
   );
 
   const reindexShelves = useCallback(async () => {
@@ -483,8 +432,8 @@ export function PlanogramEditorProvider({
     const sorted = [...current].sort((a, b) => a.baseHeight - b.baseHeight);
     const reindexed = sorted.map((s, i) => ({ ...s, index: i as ShelfIndex }));
 
-    const actions: any[] = [
-      { type: "FIXTURE_UPDATE", config: { shelves: reindexed } },
+    const actions: PlanogramAction[] = [
+      PlanogramActions.updateFixture({ config: { shelves: reindexed } }),
     ];
     products.forEach((p) => {
       const pos = p.placement.position;
@@ -492,15 +441,19 @@ export function PlanogramEditorProvider({
         const oldShelf = current.find((s) => s.index === pos.shelfIndex);
         const newShelf = reindexed.find((s) => s.id === oldShelf?.id);
         if (newShelf && newShelf.index !== pos.shelfIndex) {
-          actions.push({
-            type: "PRODUCT_UPDATE",
-            productId: p.id,
-            to: { ...pos, shelfIndex: newShelf.index },
-          });
+          actions.push(
+            PlanogramActions.moveProduct({
+              productId: p.id,
+              to: {
+                ...pos,
+                shelfIndex: newShelf.index as ShelfIndex,
+              } as SemanticPosition,
+            }),
+          );
         }
       }
     });
-    await dispatch({ type: "BATCH", actions });
+    await dispatch(PlanogramActions.batch(actions));
   }, [dispatch, fixture, products]);
 
   const commit = useCallback(async () => {

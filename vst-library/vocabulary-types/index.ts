@@ -49,7 +49,14 @@ export {
   ProductVisualProperties,
 } from "./planogram/metadata";
 
-export { FacingConfig, PyramidConfig } from "./planogram/placement";
+export {
+  FacingConfig,
+  PyramidConfig,
+  PlacementConstraints,
+  PlacementSuggestion,
+} from "./planogram/placement";
+
+export * from "./planogram/actions";
 
 // ============================================================================
 // REPOSITORIES - Data access contracts (Interfaces only)

@@ -6,6 +6,7 @@ import {
   SourceProduct,
   FixtureConfig,
   ShelfSurfacePosition,
+  ShelfConfig,
 } from "@vst/vocabulary-types";
 import { isShelfSurfacePosition } from "@vst/utils";
 import { PlanogramAction } from "../types/actions";
@@ -70,19 +71,20 @@ export class CoreActionReducer implements IActionReducer {
       case "PRODUCT_REMOVE":
         this.applyRemove(config, action.productId);
         break;
-      case "PRODUCT_FACINGS":
-        this.applyFacings(config, action.productId, action.facings);
-        break;
-      case "PRODUCT_UPDATE":
-        this.applyUpdate(config, action.productId, action.to, action.facings);
+      case "PRODUCT_UPDATE_FACINGS":
+        this.applyUpdateFacings(config, action.productId, action.facings);
         break;
       case "FIXTURE_UPDATE":
-        if (config.fixture) {
-          config.fixture.config = {
-            ...config.fixture.config,
-            ...action.config,
-          };
-        }
+        this.applyFixtureUpdate(config, action.updates);
+        break;
+      case "SHELF_ADD":
+        this.applyShelfAdd(config, action.shelf);
+        break;
+      case "SHELF_REMOVE":
+        this.applyShelfRemove(config, action.index);
+        break;
+      case "SHELF_UPDATE":
+        this.applyShelfUpdate(config, action.index, action.updates);
         break;
       case "BATCH":
         for (const subAction of action.actions) {
@@ -123,7 +125,7 @@ export class CoreActionReducer implements IActionReducer {
     config.products = config.products.filter((p) => p.id !== productId);
   }
 
-  private applyFacings(
+  private applyUpdateFacings(
     config: MutablePlanogramConfig,
     productId: string,
     facings: FacingConfig,
@@ -148,35 +150,53 @@ export class CoreActionReducer implements IActionReducer {
     }
   }
 
-  private applyUpdate(
+  private applyFixtureUpdate(
     config: MutablePlanogramConfig,
-    productId: string,
-    to?: SemanticPosition,
-    facings?: FacingConfig,
+    updates: Partial<FixtureConfig>,
   ) {
-    const product = config.products.find((p) => p.id === productId);
-    if (product) {
-      const originalPosition = { ...product.placement.position };
-      const originalFacings = product.placement.facings
-        ? { ...product.placement.facings }
-        : undefined;
-
-      if (to) product.placement.position = to;
-      if (facings) product.placement.facings = facings;
-
-      if (
-        !this.isProductValid(
-          config as unknown as PlanogramConfig,
-          product as unknown as SourceProduct,
-        )
-      ) {
-        console.warn(
-          `[CoreActionReducer] Rejected atomic update for ${productId}. Invalid state.`,
-        );
-        product.placement.position = originalPosition;
-        product.placement.facings = originalFacings;
-      }
+    // If updates contains 'config', we merge it.
+    if (updates.config) {
+      config.fixture.config = {
+        ...config.fixture.config,
+        ...(updates.config as Record<string, unknown>),
+      };
     }
+
+    // Apply other top-level properties
+    const { config: _ignored, ...otherUpdates } = updates;
+    if (Object.keys(otherUpdates).length > 0) {
+      Object.assign(config.fixture, otherUpdates);
+    }
+  }
+
+  private applyShelfAdd(config: MutablePlanogramConfig, shelf: ShelfConfig) {
+    const currentShelves =
+      (config.fixture.config.shelves as ShelfConfig[]) || [];
+    // Append the new shelf
+    config.fixture.config.shelves = [...currentShelves, shelf];
+  }
+
+  private applyShelfRemove(config: MutablePlanogramConfig, index: number) {
+    const currentShelves =
+      (config.fixture.config.shelves as ShelfConfig[]) || [];
+    config.fixture.config.shelves = currentShelves.filter(
+      (s) => s.index !== index,
+    );
+  }
+
+  private applyShelfUpdate(
+    config: MutablePlanogramConfig,
+    index: number,
+    updates: Partial<ShelfConfig>,
+  ) {
+    const currentShelves =
+      (config.fixture.config.shelves as ShelfConfig[]) || [];
+    config.fixture.config.shelves = currentShelves.map((s) => {
+      if (s.index === index) {
+        return { ...s, ...updates };
+      }
+      return s;
+    });
   }
 
   private isProductValid(

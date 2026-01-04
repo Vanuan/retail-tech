@@ -1,0 +1,37 @@
+{
+  "name": "@vst/vocabulary-actions",
+  "version": "1.0.0",
+  "description": "Domain actions and creators for VST planogram mutations.",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "module": "./index.ts",
+  "files": [
+    "**/*.ts",
+    "**/*.md",
+    "!node_modules",
+    "!tsconfig.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "vst",
+    "retail",
+    "planogram",
+    "typescript",
+    "actions",
+    "redux"
+  ],
+  "author": "VST Interview Team",
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "@vst/vocabulary-types": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

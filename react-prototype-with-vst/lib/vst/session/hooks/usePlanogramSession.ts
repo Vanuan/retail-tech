@@ -1,8 +1,13 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   PlanogramConfig,
   ProductMetadata,
   ICoreProcessor,
+  PlacementSuggestion,
+  PlacementSuggestionInput,
+  PlanogramAction,
+  ValidationResult,
+  ValidationErrorCode,
 } from "@vst/vocabulary-types";
 import { SessionStore } from "../store/SessionStore";
 import { CoreActionReducer } from "../reduction/CoreActionReducer";
@@ -34,6 +39,12 @@ export interface UsePlanogramSessionResult extends UseSessionStoreResult {
    * committing changes.
    */
   store: SessionStore | null;
+
+  suggestPlacement(
+    input: Omit<PlacementSuggestionInput, "config" | "metadata">,
+  ): PlacementSuggestion | null;
+
+  validateIntent(action: PlanogramAction): ValidationResult;
 }
 
 /**
@@ -109,10 +120,50 @@ export function usePlanogramSession(
   // 4. Use the low-level hook to subscribe the component to store updates.
   const sessionResult = useSessionStore(store);
 
-  // 5. Return the combined, user-friendly result object.
+  // 5. Expose intent services (Placement & Validation)
+  const suggestPlacement = useCallback(
+    (input: Omit<PlacementSuggestionInput, "config" | "metadata">) => {
+      if (!sessionResult.snapshot || !metadata) return null;
+
+      return processor.suggestPlacement({
+        ...input,
+        config: sessionResult.snapshot.config,
+        metadata: metadata,
+      });
+    },
+    [processor, metadata, sessionResult.snapshot],
+  );
+
+  const validateIntent = useCallback(
+    (action: PlanogramAction): ValidationResult => {
+      if (!sessionResult.snapshot || !metadata) {
+        return {
+          valid: false,
+          canRender: false,
+          errors: [
+            {
+              code: "SYSTEM_NOT_READY" as ValidationErrorCode,
+              message: "System not ready",
+            },
+          ],
+          warnings: [],
+        };
+      }
+
+      return processor.validateIntent(action, {
+        config: sessionResult.snapshot.config,
+        metadata: metadata,
+      });
+    },
+    [processor, metadata, sessionResult.snapshot],
+  );
+
+  // 6. Return the combined, user-friendly result object.
   return {
     ...sessionResult,
     isReady: !!(config && metadata && store && sessionResult.snapshot),
     store,
+    suggestPlacement,
+    validateIntent,
   };
 }

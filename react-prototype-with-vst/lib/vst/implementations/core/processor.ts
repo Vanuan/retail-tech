@@ -11,6 +11,16 @@ import {
   IDataAccessLayer,
   ICoreProcessor,
   CoreProcessInput,
+  IPlanogramSnapshot,
+  PlanogramAction,
+  PlacementSuggestionInput,
+  PlacementSuggestion,
+  ValidationContext,
+  ValidationResult,
+  ValidationErrorCode,
+  ShelfIndex,
+  ShelfConfig,
+  SemanticPosition,
 } from "@vst/vocabulary-types";
 import { isShelfSurfacePosition, createFacingConfig } from "@vst/utils";
 import { placementRegistry } from "../placement-models/registry";
@@ -19,6 +29,12 @@ import { placementRegistry } from "../placement-models/registry";
  * CoreProcessor
  * Implements the "L4" transformation layer.
  * Converts Semantic (L1) data into Render-Ready (L4) instances.
+ *
+ * ELEVATED ROLE:
+ * This class now acts as the "Authority" for planogram logic, handling:
+ * 1. Projection (State + Actions -> Snapshot)
+ * 2. Intent Validation (Can I do this?)
+ * 3. Placement Suggestions (Where should this go?)
  */
 export class CoreProcessor implements ICoreProcessor {
   constructor(private dal: IDataAccessLayer) {}
@@ -28,7 +44,6 @@ export class CoreProcessor implements ICoreProcessor {
    */
   async processAsync(config: PlanogramConfig): Promise<ProcessedPlanogram> {
     // 1. Enrich (Fetch Metadata)
-    // In a real implementation, this would use a batch loader or data loader pattern.
     const productSkus = new Set(config.products.map((p) => p.sku));
     const metadataMap = new Map<string, ProductMetadata>();
 
@@ -40,6 +55,166 @@ export class CoreProcessor implements ICoreProcessor {
     }
 
     return this.process({ config, metadata: metadataMap });
+  }
+
+  /**
+   * Applies actions to a configuration and produces a complete snapshot.
+   */
+  project(
+    config: PlanogramConfig,
+    actions: readonly PlanogramAction[],
+    metadata: ReadonlyMap<string, ProductMetadata>,
+  ): IPlanogramSnapshot {
+    // 1. Apply Actions (Derive L1 State)
+    const derivedConfig = this.applyActions(config, actions);
+
+    // 2. Process (Generate L4 State)
+    const processed = this.process({ config: derivedConfig, metadata });
+
+    // 3. Return Snapshot
+    return {
+      ...processed,
+      config: derivedConfig,
+    };
+  }
+
+  /**
+   * Calculates the best placement for a product based on business rules.
+   */
+  suggestPlacement(input: PlacementSuggestionInput): PlacementSuggestion {
+    const { sku, preferredShelf, constraints, config, metadata } = input;
+    const meta = metadata.get(sku);
+
+    if (!meta) {
+      throw new Error(
+        `Cannot suggest placement: Metadata not found for ${sku}`,
+      );
+    }
+
+    const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
+
+    // Determine shelf check order
+    let checkOrder: ShelfIndex[] = [];
+
+    if (constraints?.allowedShelves) {
+      checkOrder = constraints.allowedShelves;
+    } else {
+      const targetIndex = preferredShelf ?? 0; // Default to 0 if undefined
+      const allIndices = shelves.map((s) => s.index as ShelfIndex);
+      checkOrder = [
+        targetIndex as ShelfIndex,
+        ...allIndices.filter((i) => i !== targetIndex),
+      ];
+    }
+
+    // Scan shelves for space
+    for (const shelfIndex of checkOrder) {
+      const shelfWidth = config.fixture.dimensions.width;
+      const usedWidth = this.getShelfSpaceUsed(config, metadata, shelfIndex);
+
+      if (usedWidth + meta.dimensions.physical.width <= shelfWidth) {
+        return {
+          position: {
+            model: "shelf-surface",
+            shelfIndex,
+            x: usedWidth as Millimeters,
+            depth: 0,
+          },
+        };
+      }
+    }
+
+    // Fallback: If no space found, suggest start of preferred shelf (will collide, but valid syntax)
+    // In a real system, we might want to return "null" or throw, but the interface demands a suggestion.
+    return {
+      position: {
+        model: "shelf-surface",
+        shelfIndex: preferredShelf ?? (0 as ShelfIndex),
+        x: 0 as Millimeters,
+        depth: 0,
+      },
+    };
+  }
+
+  /**
+   * Validates if an action is permissible under business rules.
+   */
+  validateIntent(
+    action: PlanogramAction,
+    context: ValidationContext,
+  ): ValidationResult {
+    const { config, metadata } = context;
+
+    switch (action.type) {
+      case "PRODUCT_ADD":
+        return this.validatePlacement(
+          config,
+          metadata,
+          action.product.sku,
+          action.product.placement.position,
+          action.product.placement.facings?.horizontal || 1,
+          action.product.id,
+        );
+
+      case "PRODUCT_MOVE": {
+        const product = config.products.find((p) => p.id === action.productId);
+        if (!product) {
+          return {
+            valid: false,
+            canRender: false,
+            errors: [
+              {
+                code: "PRODUCT_NOT_FOUND" as ValidationErrorCode,
+                message: "Product not found",
+              },
+            ],
+            warnings: [],
+          };
+        }
+        return this.validatePlacement(
+          config,
+          metadata,
+          product.sku,
+          action.to,
+          product.placement.facings?.horizontal || 1,
+          action.productId,
+        );
+      }
+
+      case "PRODUCT_UPDATE_FACINGS": {
+        const product = config.products.find((p) => p.id === action.productId);
+        if (!product) {
+          return {
+            valid: false,
+            canRender: false,
+            errors: [
+              {
+                code: "PRODUCT_NOT_FOUND" as ValidationErrorCode,
+                message: "Product not found",
+              },
+            ],
+            warnings: [],
+          };
+        }
+        return this.validatePlacement(
+          config,
+          metadata,
+          product.sku,
+          product.placement.position,
+          action.facings.horizontal,
+          action.productId,
+        );
+      }
+
+      // TODO: Implement validation for other actions
+      default:
+        return {
+          valid: true,
+          canRender: true,
+          errors: [],
+          warnings: [],
+        };
+    }
   }
 
   /**
@@ -98,6 +273,192 @@ export class CoreProcessor implements ICoreProcessor {
         processingErrors,
       },
     };
+  }
+
+  // ==========================================================================
+  // PRIVATE HELPERS
+  // ==========================================================================
+
+  /**
+   * Applies a list of actions to a base configuration.
+   * Pure function: Returns a new configuration object.
+   */
+  private applyActions(
+    base: PlanogramConfig,
+    actions: readonly PlanogramAction[],
+  ): PlanogramConfig {
+    const config = JSON.parse(JSON.stringify(base)) as PlanogramConfig;
+
+    for (const action of actions) {
+      this.executeAction(config, action);
+    }
+
+    return config;
+  }
+
+  private executeAction(config: PlanogramConfig, action: PlanogramAction) {
+    switch (action.type) {
+      case "PRODUCT_MOVE": {
+        const p = config.products.find((p) => p.id === action.productId);
+        if (p) p.placement.position = action.to;
+        break;
+      }
+      case "PRODUCT_ADD": {
+        config.products.push(JSON.parse(JSON.stringify(action.product)));
+        break;
+      }
+      case "PRODUCT_REMOVE": {
+        config.products = config.products.filter(
+          (p) => p.id !== action.productId,
+        );
+        break;
+      }
+      case "PRODUCT_UPDATE_FACINGS": {
+        const p = config.products.find((p) => p.id === action.productId);
+        if (p) p.placement.facings = action.facings;
+        break;
+      }
+      case "SHELF_ADD": {
+        const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
+        config.fixture.config.shelves = [...shelves, action.shelf];
+        break;
+      }
+      case "SHELF_REMOVE": {
+        const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
+        config.fixture.config.shelves = shelves.filter(
+          (s) => s.index !== action.index,
+        );
+        break;
+      }
+      case "SHELF_UPDATE": {
+        const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
+        config.fixture.config.shelves = shelves.map((s) =>
+          s.index === action.index ? { ...s, ...action.updates } : s,
+        );
+        break;
+      }
+      case "FIXTURE_UPDATE": {
+        if (action.updates.config) {
+          config.fixture.config = {
+            ...config.fixture.config,
+            ...(action.updates.config as Record<string, unknown>),
+          };
+        }
+        const { config: _ign, ...others } = action.updates;
+        Object.assign(config.fixture, others);
+        break;
+      }
+      case "BATCH": {
+        for (const sub of action.actions) {
+          this.executeAction(config, sub);
+        }
+        break;
+      }
+    }
+  }
+
+  private getShelfSpaceUsed(
+    config: PlanogramConfig,
+    metadata: ReadonlyMap<string, ProductMetadata>,
+    shelfIndex: number,
+  ): number {
+    let maxX = 0;
+    for (const p of config.products) {
+      const pos = p.placement.position;
+      if (isShelfSurfacePosition(pos) && pos.shelfIndex === shelfIndex) {
+        const meta = metadata.get(p.sku);
+        if (meta) {
+          const w =
+            meta.dimensions.physical.width *
+            (p.placement.facings?.horizontal || 1);
+          maxX = Math.max(maxX, pos.x + w);
+        }
+      }
+    }
+    return maxX;
+  }
+
+  private validatePlacement(
+    config: PlanogramConfig,
+    metadata: ReadonlyMap<string, ProductMetadata>,
+    sku: string,
+    position: SemanticPosition,
+    facings: number,
+    excludeId?: string,
+  ): ValidationResult {
+    // 1. Basic Bounds Check
+    if (!isShelfSurfacePosition(position)) {
+      return { valid: true, canRender: true, errors: [], warnings: [] };
+    }
+
+    const meta = metadata.get(sku);
+    if (!meta) {
+      return {
+        valid: false,
+        canRender: false,
+        errors: [
+          {
+            code: "METADATA_MISSING" as ValidationErrorCode,
+            message: "Metadata not found",
+          },
+        ],
+        warnings: [],
+      };
+    }
+
+    const width = meta.dimensions.physical.width * facings;
+    const fixtureWidth = config.fixture.dimensions.width;
+
+    if (position.x < 0 || position.x + width > fixtureWidth) {
+      return {
+        valid: false,
+        canRender: true,
+        errors: [
+          {
+            code: "OUT_OF_BOUNDS" as ValidationErrorCode,
+            message: "Placement is out of bounds",
+          },
+        ],
+        warnings: [],
+      };
+    }
+
+    // 2. Collision Check
+    const collision = config.products.some((p) => {
+      if (p.id === excludeId) return false;
+      const pPos = p.placement.position;
+      if (
+        !isShelfSurfacePosition(pPos) ||
+        pPos.shelfIndex !== position.shelfIndex
+      )
+        return false;
+
+      const pMeta = metadata.get(p.sku);
+      const pW =
+        (pMeta?.dimensions.physical.width || 0) *
+        (p.placement.facings?.horizontal || 1);
+
+      // AABB overlap test
+      return (
+        position.x < pPos.x + pW - 0.5 && position.x + width > pPos.x + 0.5
+      );
+    });
+
+    if (collision) {
+      return {
+        valid: false,
+        canRender: true,
+        errors: [
+          {
+            code: "COLLISION" as ValidationErrorCode,
+            message: "Product collides with another product",
+          },
+        ],
+        warnings: [],
+      };
+    }
+
+    return { valid: true, canRender: true, errors: [], warnings: [] };
   }
 
   /**

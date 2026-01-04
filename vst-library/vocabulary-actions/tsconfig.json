@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext", "DOM"],
+    "strict": true,
+    "declaration": true,
+    "sourceMap": true,
+    "composite": false,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "rootDir": "../",
+    "paths": {
+      "@vst/vocabulary-types": ["../vocabulary-types/index.ts"],
+    },
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist"],
+}

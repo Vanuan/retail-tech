@@ -54,9 +54,9 @@ export class SessionStore {
     // We NEVER squash onto a PRODUCT_ADD, otherwise the product disappears from history.
     const canSquash =
       lastAction &&
+      lastAction.type === action.type &&
       (lastAction.type === "PRODUCT_MOVE" ||
-        lastAction.type === "PRODUCT_FACINGS" ||
-        lastAction.type === "PRODUCT_UPDATE") &&
+        lastAction.type === "PRODUCT_UPDATE_FACINGS") &&
       "productId" in action &&
       (lastAction as any).productId === (action as any).productId;
 

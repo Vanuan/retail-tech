@@ -3,7 +3,8 @@
  * Declarative shapes for repeating and stacking products.
  */
 
-import { Millimeters, FacingCount } from "../core/units";
+import { Millimeters, FacingCount, ShelfIndex } from "../core/units";
+import { SemanticPosition } from "../coordinates/semantic";
 
 /**
  * FacingConfig
@@ -45,4 +46,22 @@ export interface PyramidConfig {
 
   /** Vertical gap between layers in mm */
   readonly verticalGap?: Millimeters;
+}
+
+/**
+ * PlacementConstraints
+ * Constraints provided when asking for a placement suggestion.
+ */
+export interface PlacementConstraints {
+  /** Only consider these shelves */
+  readonly allowedShelves?: ShelfIndex[];
+}
+
+/**
+ * PlacementSuggestion
+ * The result of a placement request.
+ */
+export interface PlacementSuggestion {
+  /** The calculated semantic position */
+  readonly position: SemanticPosition;
 }
