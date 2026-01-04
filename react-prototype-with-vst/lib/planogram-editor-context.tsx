@@ -19,6 +19,8 @@ import {
   Millimeters,
   RenderInstance,
   SemanticPosition,
+  PlacementSuggestion,
+  ValidationResult,
 } from "@vst/vocabulary-types";
 
 export type { RenderInstance };
@@ -105,13 +107,11 @@ interface PlanogramEditorContextType {
   getVisibleInstances: () => RenderInstance[];
   resizeViewport: (width: number, height: number) => void;
   getShelfSpaceUsed: (index: number) => number;
-  validatePlacement: (
-    sku: string,
-    position: any,
-    facings: number,
-    excludeId?: string,
-  ) => any;
-  findNextAvailablePosition: (sku: string, shelfIndex?: number) => any;
+  suggestPlacement: (input: {
+    sku: string;
+    preferredShelf?: ShelfIndex;
+  }) => PlacementSuggestion | null;
+  validateIntent: (action: PlanogramAction) => ValidationResult;
 }
 
 export const PlanogramEditorContext =
@@ -504,6 +504,27 @@ export function PlanogramEditorProvider({
     [updateConfig],
   );
 
+  const getShelfSpaceUsed = useCallback(
+    (index: number) => {
+      let used = 0;
+      products.forEach((p) => {
+        if (
+          isShelfSurfacePosition(p.placement.position) &&
+          p.placement.position.shelfIndex === index
+        ) {
+          const meta = metadata?.get(p.sku);
+          if (meta) {
+            used +=
+              meta.dimensions.physical.width *
+              (p.placement.facings?.horizontal || 1);
+          }
+        }
+      });
+      return used;
+    },
+    [products, metadata],
+  );
+
   const value: PlanogramEditorContextType = {
     fixture,
     products,
@@ -548,8 +569,8 @@ export function PlanogramEditorProvider({
     getVisibleInstances: () => renderInstances,
     resizeViewport: () => {},
     getShelfSpaceUsed,
-    validatePlacement,
-    findNextAvailablePosition,
+    suggestPlacement,
+    validateIntent,
   };
 
   return (

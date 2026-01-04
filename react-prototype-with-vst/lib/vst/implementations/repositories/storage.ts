@@ -1,5 +1,4 @@
-import { PlanogramConfig } from "@vst/vocabulary-types";
-import { PlanogramConfigSchema } from "@/vst-library/vocabulary-types/planogram/schemas";
+import { PlanogramConfig, PlanogramConfigSchema } from "@vst/vocabulary-types";
 
 const KEY_PREFIX = "vst-planogram-";
 

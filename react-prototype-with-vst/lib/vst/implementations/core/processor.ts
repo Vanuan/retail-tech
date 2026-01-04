@@ -21,6 +21,7 @@ import {
   ShelfIndex,
   ShelfConfig,
   SemanticPosition,
+  ShelfSurfacePosition,
 } from "@vst/vocabulary-types";
 import { isShelfSurfacePosition, createFacingConfig } from "@vst/utils";
 import { placementRegistry } from "../placement-models/registry";
@@ -119,7 +120,7 @@ export class CoreProcessor implements ICoreProcessor {
             shelfIndex,
             x: usedWidth as Millimeters,
             depth: 0,
-          },
+          } as ShelfSurfacePosition,
         };
       }
     }
@@ -132,7 +133,7 @@ export class CoreProcessor implements ICoreProcessor {
         shelfIndex: preferredShelf ?? (0 as ShelfIndex),
         x: 0 as Millimeters,
         depth: 0,
-      },
+      } as ShelfSurfacePosition,
     };
   }
 
@@ -287,73 +288,118 @@ export class CoreProcessor implements ICoreProcessor {
     base: PlanogramConfig,
     actions: readonly PlanogramAction[],
   ): PlanogramConfig {
-    const config = JSON.parse(JSON.stringify(base)) as PlanogramConfig;
-
-    for (const action of actions) {
-      this.executeAction(config, action);
-    }
-
-    return config;
+    return actions.reduce(
+      (config, action) => this.reduceAction(config, action),
+      base,
+    );
   }
 
-  private executeAction(config: PlanogramConfig, action: PlanogramAction) {
+  private reduceAction(
+    config: PlanogramConfig,
+    action: PlanogramAction,
+  ): PlanogramConfig {
     switch (action.type) {
       case "PRODUCT_MOVE": {
-        const p = config.products.find((p) => p.id === action.productId);
-        if (p) p.placement.position = action.to;
-        break;
+        return {
+          ...config,
+          products: config.products.map((p) =>
+            p.id === action.productId
+              ? { ...p, placement: { ...p.placement, position: action.to } }
+              : p,
+          ),
+        };
       }
       case "PRODUCT_ADD": {
-        config.products.push(JSON.parse(JSON.stringify(action.product)));
-        break;
+        return {
+          ...config,
+          products: [...config.products, action.product],
+        };
       }
       case "PRODUCT_REMOVE": {
-        config.products = config.products.filter(
-          (p) => p.id !== action.productId,
-        );
-        break;
+        return {
+          ...config,
+          products: config.products.filter((p) => p.id !== action.productId),
+        };
       }
       case "PRODUCT_UPDATE_FACINGS": {
-        const p = config.products.find((p) => p.id === action.productId);
-        if (p) p.placement.facings = action.facings;
-        break;
+        return {
+          ...config,
+          products: config.products.map((p) =>
+            p.id === action.productId
+              ? {
+                  ...p,
+                  placement: { ...p.placement, facings: action.facings },
+                }
+              : p,
+          ),
+        };
       }
       case "SHELF_ADD": {
         const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
-        config.fixture.config.shelves = [...shelves, action.shelf];
-        break;
+        return {
+          ...config,
+          fixture: {
+            ...config.fixture,
+            config: {
+              ...config.fixture.config,
+              shelves: [...shelves, action.shelf],
+            },
+          },
+        };
       }
       case "SHELF_REMOVE": {
         const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
-        config.fixture.config.shelves = shelves.filter(
-          (s) => s.index !== action.index,
-        );
-        break;
+        return {
+          ...config,
+          fixture: {
+            ...config.fixture,
+            config: {
+              ...config.fixture.config,
+              shelves: shelves.filter((s) => s.index !== action.index),
+            },
+          },
+        };
       }
       case "SHELF_UPDATE": {
         const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
-        config.fixture.config.shelves = shelves.map((s) =>
-          s.index === action.index ? { ...s, ...action.updates } : s,
-        );
-        break;
+        return {
+          ...config,
+          fixture: {
+            ...config.fixture,
+            config: {
+              ...config.fixture.config,
+              shelves: shelves.map((s) =>
+                s.index === action.index ? { ...s, ...action.updates } : s,
+              ),
+            },
+          },
+        };
       }
       case "FIXTURE_UPDATE": {
-        if (action.updates.config) {
-          config.fixture.config = {
+        const { config: updateConfig, ...updateOthers } = action.updates;
+        const resultFixture = {
+          ...config.fixture,
+          ...updateOthers,
+        };
+        if (updateConfig) {
+          resultFixture.config = {
             ...config.fixture.config,
-            ...(action.updates.config as Record<string, unknown>),
+            ...(updateConfig as Record<string, unknown>),
           };
         }
-        const { config: _ign, ...others } = action.updates;
-        Object.assign(config.fixture, others);
-        break;
+        return {
+          ...config,
+          fixture: resultFixture,
+        };
       }
       case "BATCH": {
-        for (const sub of action.actions) {
-          this.executeAction(config, sub);
-        }
-        break;
+        return action.actions.reduce(
+          (cfg, subAction) => this.reduceAction(cfg, subAction),
+          config,
+        );
       }
+      default:
+        return config;
     }
   }
 

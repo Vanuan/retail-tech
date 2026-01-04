@@ -15,6 +15,7 @@ import {
   IVstRenderer,
 } from "@vst/vocabulary-types";
 import { createFacingConfig } from "@vst/utils";
+import { PlanogramActions } from "@vst/vocabulary-actions";
 import { placementRegistry } from "@/lib/vst/implementations";
 import { Canvas2DRenderer } from "@/lib/vst/implementations/renderers/canvas-2d";
 import { TescoRenderer } from "@/lib/vst/implementations/renderers/tesco-renderer";
@@ -71,7 +72,7 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
     resizeViewport,
     getVisibleInstances,
     updateProduct,
-    validatePlacement,
+    validateIntent,
     products,
     updateShelf,
     reindexShelves,
@@ -512,11 +513,11 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
 
           if (newFacings !== product.placement.facings?.horizontal) {
             // Validate bounds and collisions before updating
-            const validation = validatePlacement(
-              product.sku,
-              product.placement.position,
-              newFacings,
-              product.id,
+            const validation = validateIntent(
+              PlanogramActions.updateFacings({
+                productId: product.id,
+                facings: createFacingConfig(newFacings, 1),
+              }),
             );
 
             if (validation.valid) {
@@ -599,11 +600,11 @@ export function PlanogramCanvas({ rendererType }: PlanogramCanvasProps) {
         }
 
         // Validate movement (Physics Restrictions)
-        const validation = validatePlacement(
-          product.sku,
-          newPosition,
-          product.placement.facings?.horizontal || 1,
-          dragProductId,
+        const validation = validateIntent(
+          PlanogramActions.moveProduct({
+            productId: product.id,
+            to: newPosition,
+          }),
         );
 
         if (validation.valid) {
