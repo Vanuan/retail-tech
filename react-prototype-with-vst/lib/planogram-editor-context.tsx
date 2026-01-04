@@ -7,110 +7,105 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
 } from "react";
 import { usePlanogramData } from "./planogram-data-context";
 import {
   SourceProduct,
   ProductMetadata,
   ShelfConfig,
+  FixtureConfig,
   PlanogramConfig,
   ShelfIndex,
   Millimeters,
   RenderInstance,
 } from "@vst/vocabulary-types";
-import { isShelfSurfacePosition, createFacingConfig } from "@vst/utils";
 
 export type { RenderInstance };
-import {
-  SessionStore,
-  CoreSequenceRoller,
-  usePlanogramSession,
-} from "@vst/session";
-import { CoreProcessor } from "./vst/implementations/core/processor";
+import { isShelfSurfacePosition, createFacingConfig } from "@vst/utils";
+import { usePlanogramSession, PlanogramSnapshot } from "@vst/session";
+
 import { dal } from "./vst/implementations/repositories/data-access";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
 
-// Generate a simple ID if uuid is not available, or use random
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
 interface ViewportState {
-  x: number;
-  y: number;
+  type: "orthographic";
+  ppi: number;
   zoom: number;
+  offset: { x: number; y: number; z: number };
 }
 
 interface PlanogramEditorContextType {
+  // State
+  fixture: FixtureConfig | null;
+  products: readonly SourceProduct[];
+  productMetadata: Record<string, ProductMetadata>;
+  renderInstances: RenderInstance[];
+  snapshot: PlanogramSnapshot | null;
+
   // Selection
   selectedProductId: string | null;
   setSelectedProductId: (id: string | null) => void;
-  selectedShelf: { id: string; index: number } | null;
-  setSelectedShelf: (shelf: { id: string; index: number } | null) => void;
+  selectedShelf: number;
+  setSelectedShelf: (index: number) => void;
 
   // Viewport
   viewport: ViewportState;
   setViewport: (v: ViewportState) => void;
-  zoomAt: (x: number, y: number, delta: number) => void;
-  panBy: (dx: number, dy: number) => void;
+  zoomAt: (point: { x: number; y: number }, factor: number) => void;
+  applyZoom: (factor: number) => void;
+  panBy: (delta: { x: number; y: number }) => void;
   fitToScreen: (width: number, height: number) => void;
   unprojectPoint: (x: number, y: number) => { x: number; y: number; z: number };
 
-  // Logic
-  validatePlacement: (
-    product: SourceProduct,
-    position: any,
-    ignoreProductId?: string,
-  ) => { valid: boolean; error?: string; spaceUsed?: number };
-
-  findNextAvailablePosition: (
-    metadata: ProductMetadata,
-    preferredShelfIndex?: number,
-  ) => { shelfIndex: number; x: number; depth: number } | null;
-
-  getShelfSpaceUsed: (
-    shelfIndex: number,
-    products: readonly SourceProduct[],
-    ignoreProductId?: string,
-  ) => number;
-
-  // Actions
-  addProduct: (product: SourceProduct) => Promise<void>;
-  removeProduct: (productId: string) => Promise<void>;
+  // Mutations
+  addProduct: (sku: string, position?: any) => Promise<void>;
+  removeProduct: (id: string) => Promise<void>;
   updateProduct: (
     id: string,
     updates: Partial<SourceProduct>,
     silent?: boolean,
   ) => Promise<void>;
-  selectProduct: (productId: string | null) => void;
+  selectProduct: (id: string | null) => void;
 
   addShelf: () => void;
-  removeShelf: (shelfIndex: number) => void;
-  updateShelf: (
-    shelfIndex: number,
-    updates: Partial<ShelfConfig>,
-  ) => Promise<void>;
-  reindexShelves: (shelves: ShelfConfig[]) => ShelfConfig[];
-  reindexShelvesAction: () => Promise<void>;
+  removeShelf: (index: number) => void;
+  updateShelf: (index: number, updates: Partial<ShelfConfig>) => Promise<void>;
+  reindexShelves: () => Promise<void>;
 
-  // Data State
-  renderInstances: RenderInstance[];
-  snapshot: any;
-
-  // Session Actions
+  // Session
   undo: () => Promise<void>;
   redo: () => Promise<void>;
   canUndo: boolean;
   canRedo: boolean;
   isProjecting: boolean;
-
-  // Meta/File Operations
-  savePlanogram: () => Promise<void>;
+  hasUnsavedChanges: boolean;
   commit: () => Promise<void>;
-  savedPlanograms: PlanogramConfig[];
-  refreshSavedPlanograms: () => Promise<void>;
+
+  // File
+  planogramName: string;
+  setPlanogramName: (name: string) => void;
+  savePlanogram: () => Promise<void>;
+  isSaving: boolean;
   createNewPlanogram: () => Promise<void>;
   renamePlanogram: (name: string) => Promise<void>;
+  savedPlanograms: PlanogramConfig[];
+  refreshSavedPlanograms: () => Promise<void>;
+
+  // Helpers
+  getRenderInstances: () => RenderInstance[];
+  getVisibleInstances: () => RenderInstance[];
+  resizeViewport: (width: number, height: number) => void;
+  getShelfSpaceUsed: (index: number) => number;
+  validatePlacement: (
+    sku: string,
+    position: any,
+    facings: number,
+    excludeId?: string,
+  ) => any;
+  findNextAvailablePosition: (sku: string, shelfIndex?: number) => any;
 }
 
 export const PlanogramEditorContext =
@@ -127,248 +122,11 @@ export function usePlanogramEditor() {
 }
 
 /**
- * Backward compatibility hook.
- * Mimics the API of the original usePlanogram hook by composing Data and Editor contexts.
+ * Main application hook.
+ * Alias for usePlanogramEditor to provide a clean API for components.
  */
 export function usePlanogram() {
-  const data = usePlanogramData();
-  const editor = usePlanogramEditor();
-
-  // Compat wrappers
-  const fixture = data.config?.fixture || null;
-  const products = data.config?.products || [];
-
-  // Convert Map to Record for compatibility
-  const productMetadata: Record<string, ProductMetadata> = {};
-  data.metadata.forEach((value, key) => {
-    productMetadata[key] = value;
-  });
-
-  const selectedShelfIndex = editor.selectedShelf?.index ?? 0;
-
-  const setSelectedShelf = useCallback(
-    (idx: number | ((prev: number) => number)) => {
-      if (!fixture) return;
-      const val = typeof idx === "function" ? idx(selectedShelfIndex) : idx;
-      const shelves = (fixture.config.shelves as ShelfConfig[]) || [];
-      const shelf = shelves.find((s) => s.index === val);
-      if (shelf) {
-        editor.setSelectedShelf({ id: shelf.id, index: shelf.index });
-      } else {
-        // Fallback if shelf not found (e.g. index 0 default)
-        editor.setSelectedShelf({ id: "unknown", index: val });
-      }
-    },
-    [editor, fixture, selectedShelfIndex],
-  );
-
-  const setPlanogramName = useCallback(
-    (name: string) => {
-      data.updateConfig((prev) => ({ ...prev, name }));
-    },
-    [data],
-  );
-
-  const applyZoom = useCallback(
-    (factor: number) => {
-      // Zoom relative to center? We need access to screen dimensions, roughly.
-      // For now, just zoom at 0,0 or center of viewport logic in zoomAt
-      // The original applyZoom used zoomCenter which used the viewport center.
-      // We'll approximate by just scaling the zoom level directly or using zoomAt with a dummy point.
-      // Actually zoomAt takes delta (logarithmic). Factor 1.2 is roughly delta 180.
-      // Let's implement a direct zoom multiplier in the context or just fake it.
-      // We'll manually update viewport state here since we have setViewport.
-      editor.setViewport({
-        ...editor.viewport,
-        zoom: editor.viewport.zoom * factor,
-      });
-    },
-    [editor],
-  );
-
-  // Wrappers for simpler signatures
-  const getShelfSpaceUsed = useCallback(
-    (index: number) => editor.getShelfSpaceUsed(index, products),
-    [editor, products],
-  );
-
-  const validatePlacement = useCallback(
-    (
-      sku: string,
-      position: any,
-      facings: number,
-      excludeProductId?: string,
-    ) => {
-      const pos = { ...position };
-      if (!pos.model) pos.model = "shelf-surface";
-
-      // Construct a dummy product for validation
-      const product: SourceProduct = {
-        id: excludeProductId || "temp",
-        sku,
-        placement: {
-          position: pos,
-          facings: createFacingConfig(facings, 1),
-        },
-      };
-      return editor.validatePlacement(product, pos, excludeProductId);
-    },
-    [editor],
-  );
-
-  const findNextAvailablePosition = useCallback(
-    (sku: string, shelfIndex?: number) => {
-      const meta = data.metadata.get(sku);
-      if (!meta)
-        return { model: "shelf-surface", shelfIndex: 0, x: 0, depth: 0 }; // Fallback
-      return (
-        editor.findNextAvailablePosition(meta, shelfIndex) || {
-          model: "shelf-surface",
-          shelfIndex: 0,
-          x: 0,
-          depth: 0,
-        }
-      );
-    },
-    [editor, data.metadata],
-  );
-
-  const addProduct = useCallback(
-    async (sku: string, position?: any) => {
-      const meta = data.metadata.get(sku);
-      if (!meta) return;
-
-      let finalPos = { ...position };
-      if (!position || position.x === undefined) {
-        const autoPos = editor.findNextAvailablePosition(
-          meta,
-          position?.shelfIndex ?? editor.selectedShelf?.index,
-        );
-        if (autoPos) {
-          finalPos = { ...finalPos, ...autoPos };
-        } else {
-          finalPos = {
-            model: "shelf-surface",
-            shelfIndex: position?.shelfIndex ?? 0,
-            x: 0,
-            depth: 0,
-            ...finalPos,
-          };
-        }
-      }
-      if (!finalPos.model) finalPos.model = "shelf-surface";
-
-      // Check validation before adding
-      const validation = validatePlacement(sku, finalPos, 1);
-      if (!validation.valid) {
-        toast.error(`Cannot add product: ${validation.error}`);
-        return;
-      }
-
-      const newProduct: SourceProduct = {
-        id: uuidv4(),
-        sku,
-        placement: {
-          position: {
-            ...finalPos,
-            shelfIndex: finalPos.shelfIndex as ShelfIndex,
-          },
-          facings: createFacingConfig(1, 1),
-        },
-      };
-      await editor.addProduct(newProduct);
-    },
-    [data.metadata, findNextAvailablePosition, validatePlacement, editor],
-  );
-
-  const updateProduct = useCallback(
-    async (id: string, updates: Partial<SourceProduct>, silent?: boolean) => {
-      await editor.updateProduct(id, updates, silent);
-    },
-    [editor.updateProduct],
-  );
-
-  // Missing methods stubbed or mapped
-  const resizeViewport = (w: number, h: number) => {}; // No-op, managed by canvas mostly now
-  const getVisibleInstances = () => editor.renderInstances;
-
-  return {
-    // Data
-    fixture,
-    products,
-    productMetadata,
-    planogramId: data.config?.id || "",
-    planogramName: data.config?.name || "Untitled",
-    setPlanogramName,
-    isLoading: data.isLoading,
-    isSaving: data.isSaving,
-    hasUnsavedChanges:
-      data.hasUnsavedChanges || editor.snapshot?.session?.isDirty || false,
-    error: data.error ? data.error.message : null,
-    savedPlanograms: editor.savedPlanograms,
-
-    // Selection
-    selectedProductId: editor.selectedProductId,
-    selectProduct: editor.selectProduct,
-    selectedShelf: selectedShelfIndex,
-    setSelectedShelf,
-
-    // Viewport
-    viewport: {
-      type: "orthographic" as const,
-      ppi: 1,
-      zoom: editor.viewport.zoom,
-      offset: { x: editor.viewport.x, y: editor.viewport.y, z: 0 },
-    },
-    zoomAt: (point: { x: number; y: number }, factor: number) => {
-      // adapt vector2 to x,y
-      // factor conversion needed? original zoomAt took factor (e.g. 1.1)
-      // new zoomAt takes delta.
-      // Let's just use direct setViewport for compatibility if needed or adapt
-      // We will approximate: log(factor) / log(1.001)
-      const delta = Math.log(factor) / Math.log(1.001);
-      editor.zoomAt(point.x, point.y, delta);
-    },
-    applyZoom,
-    panBy: (delta: { x: number; y: number }) => editor.panBy(delta.x, delta.y),
-    fitToScreen: editor.fitToScreen,
-    resizeViewport,
-    unprojectPoint: (p: { x: number; y: number }) =>
-      editor.unprojectPoint(p.x, p.y),
-    getVisibleInstances,
-
-    // Actions
-    addProduct,
-    removeProduct: editor.removeProduct,
-    updateProduct,
-    addShelf: editor.addShelf,
-    removeShelf: editor.removeShelf,
-    updateShelf: editor.updateShelf,
-    insertShelf: editor.addShelf,
-    reindexShelves: editor.reindexShelvesAction,
-
-    // Logic
-    getShelfSpaceUsed,
-    validatePlacement,
-    findNextAvailablePosition,
-
-    // Persistence
-    savePlanogram: editor.savePlanogram,
-    loadPlanogram: data.loadPlanogram,
-    createNewPlanogram: editor.createNewPlanogram,
-    renamePlanogram: editor.renamePlanogram,
-
-    undo: editor.undo,
-    redo: editor.redo,
-    canUndo: editor.canUndo,
-    canRedo: editor.canRedo,
-    isProjecting: editor.isProjecting,
-    snapshot: editor.snapshot,
-    validation: editor.snapshot?.validation || null,
-    commit: editor.commit,
-
-    getRenderInstances: () => editor.renderInstances,
-  };
+  return usePlanogramEditor();
 }
 
 export function PlanogramEditorProvider({
@@ -383,54 +141,134 @@ export function PlanogramEditorProvider({
     savePlanogram,
     setConfig,
     renderInstances: dataRenderInstances,
+    hasUnsavedChanges: dataDirty,
+    isSaving,
   } = usePlanogramData();
 
-  // --- Session Management ---
-  const [sessionStore, setSessionStore] = useState<SessionStore | null>(null);
-  const processor = useMemo(() => new CoreProcessor(dal), []);
-  const roller = useRef(new CoreSequenceRoller(processor, metadata));
+  // --- Session ---
+  const {
+    snapshot,
+    dispatch,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    isProjecting,
+    store: sessionStore,
+  } = usePlanogramSession(config, metadata, dal);
 
-  // Keep roller dependencies in sync
   useEffect(() => {
-    const r = roller.current as any;
-    r.processor = processor;
-    r.metadata = metadata;
-  }, [processor, metadata]);
-
-  // Initialize session store when config is loaded or changed
-  useEffect(() => {
-    if (config) {
-      setSessionStore(new SessionStore(config, roller.current));
-    }
-  }, [config?.id]);
-
-  const { snapshot, dispatch, undo, redo, canUndo, canRedo, isProjecting } =
-    usePlanogramSession(sessionStore);
-
-  // Sync session changes back to the data layer for persistence/rendering
-  useEffect(() => {
-    if (snapshot) {
-      setConfig(snapshot.config);
-    }
+    if (snapshot) setConfig(snapshot.config);
   }, [snapshot, setConfig]);
 
   const renderInstances = snapshot?.renderInstances || dataRenderInstances;
+  const products = snapshot?.config.products || config?.products || [];
+  const fixture = snapshot?.config.fixture || config?.fixture || null;
 
-  // --- Selection State ---
+  // Convert metadata Map to Record for easier consumption in components
+  const productMetadata = useMemo(() => {
+    const record: Record<string, ProductMetadata> = {};
+    metadata?.forEach((m, sku) => {
+      record[sku] = m;
+    });
+    return record;
+  }, [metadata]);
+
+  // --- Selection ---
   const [selectedProductId, setSelectedProductId] = useState<string | null>(
     null,
   );
-  const [selectedShelf, setSelectedShelf] = useState<{
-    id: string;
-    index: number;
-  } | null>(null);
+  const [selectedShelfState, setSelectedShelfState] = useState<number>(0);
 
-  // --- Viewport State ---
+  const selectProduct = useCallback(
+    (id: string | null) => {
+      setSelectedProductId(id);
+      sessionStore?.setSelection(id ? [id] : []);
+    },
+    [sessionStore],
+  );
+
+  // --- Viewport ---
   const [viewport, setViewport] = useState<ViewportState>({
-    x: 0,
-    y: 0,
+    type: "orthographic",
+    ppi: 1,
     zoom: 1,
+    offset: { x: 0, y: 0, z: 0 },
   });
+
+  const zoomAt = useCallback(
+    (point: { x: number; y: number }, factor: number) => {
+      setViewport((prev) => {
+        const newZoom = Math.max(0.1, Math.min(prev.zoom * factor, 10));
+        const worldX = (point.x - prev.offset.x) / prev.zoom;
+        const worldY = (point.y - prev.offset.y) / prev.zoom;
+        return {
+          ...prev,
+          offset: {
+            ...prev.offset,
+            x: point.x - worldX * newZoom,
+            y: point.y - worldY * newZoom,
+          },
+          zoom: newZoom,
+        };
+      });
+    },
+    [],
+  );
+
+  const panBy = useCallback((delta: { x: number; y: number }) => {
+    setViewport((prev) => ({
+      ...prev,
+      offset: {
+        ...prev.offset,
+        x: prev.offset.x + delta.x,
+        y: prev.offset.y + delta.y,
+      },
+    }));
+  }, []);
+
+  const applyZoom = useCallback(
+    (factor: number) => {
+      setViewport((prev) => ({
+        ...prev,
+        zoom: prev.zoom * factor,
+      }));
+    },
+    [setViewport],
+  );
+
+  const fitToScreen = useCallback(
+    (width: number, height: number) => {
+      if (!fixture) return;
+      const fw = fixture.dimensions.width;
+      const fh = fixture.dimensions.height;
+      const padding = 40;
+      const scale = Math.min(
+        (width - padding * 2) / fw,
+        (height - padding * 2) / fh,
+      );
+      setViewport({
+        type: "orthographic",
+        ppi: 1,
+        offset: {
+          x: (width - fw * scale) / 2,
+          y: (height - fh * scale) / 2,
+          z: 0,
+        },
+        zoom: scale,
+      });
+    },
+    [fixture],
+  );
+
+  const unprojectPoint = useCallback(
+    (x: number, y: number) => ({
+      x: (x - viewport.offset.x) / viewport.zoom,
+      y: (y - viewport.offset.y) / viewport.zoom,
+      z: 0,
+    }),
+    [viewport],
+  );
 
   // --- Saved Files State ---
   const [savedPlanograms, setSavedPlanograms] = useState<PlanogramConfig[]>([]);
@@ -448,223 +286,122 @@ export function PlanogramEditorProvider({
     refreshSavedPlanograms();
   }, [refreshSavedPlanograms]);
 
-  // Viewport Logic
-  const zoomAt = useCallback((x: number, y: number, delta: number) => {
-    setViewport((prev) => {
-      const zoomFactor = Math.pow(1.001, delta);
-      const newZoom = Math.max(0.1, Math.min(prev.zoom * zoomFactor, 10));
-
-      // Calculate offset to keep (x,y) stable
-      // worldX = (screenX - offset.x) / zoom
-      // worldX should be same before and after
-      const worldX = (x - prev.x) / prev.zoom;
-      const worldY = (y - prev.y) / prev.zoom;
-
-      const newX = x - worldX * newZoom;
-      const newY = y - worldY * newZoom;
-
-      return { x: newX, y: newY, zoom: newZoom };
-    });
-  }, []);
-
-  const panBy = useCallback((dx: number, dy: number) => {
-    setViewport((prev) => ({
-      ...prev,
-      x: prev.x + dx,
-      y: prev.y + dy,
-    }));
-  }, []);
-
-  const fitToScreen = useCallback(
-    (width: number, height: number) => {
-      if (!config) return;
-
-      const fixtureW = config.fixture.dimensions.width;
-      const fixtureH = config.fixture.dimensions.height;
-      const padding = 40;
-
-      const availableW = width - padding * 2;
-      const availableH = height - padding * 2;
-
-      const scaleX = availableW / fixtureW;
-      const scaleY = availableH / fixtureH;
-      const scale = Math.min(scaleX, scaleY);
-
-      // Center
-      const drawnW = fixtureW * scale;
-      const drawnH = fixtureH * scale;
-      const offsetX = (width - drawnW) / 2;
-      const offsetY = (height - drawnH) / 2;
-
-      setViewport({
-        x: offsetX,
-        y: offsetY,
-        zoom: scale,
-      });
-    },
-    [config],
-  );
-
-  const unprojectPoint = useCallback(
-    (x: number, y: number) => {
-      // Screen -> World
-      // screen = world * zoom + offset
-      // world = (screen - offset) / zoom
-      return {
-        x: (x - viewport.x) / viewport.zoom,
-        y: (y - viewport.y) / viewport.zoom,
-        z: 0,
-      };
-    },
-    [viewport],
-  );
-
   // --- Logic Helpers ---
-
   const getShelfSpaceUsed = useCallback(
-    (
-      shelfIndex: number,
-      products: readonly SourceProduct[],
-      ignoreProductId?: string,
-    ) => {
-      const activeProducts = snapshot?.config.products || products;
-      const productsOnShelf = activeProducts.filter((p) => {
-        if (p.id === ignoreProductId) return false;
-        if (!isShelfSurfacePosition(p.placement.position)) return false;
-        const pos = p.placement.position;
-        return (
-          pos.shelfIndex === shelfIndex &&
-          typeof pos.x === "number" &&
-          !isNaN(pos.x)
-        );
-      });
-
+    (shelfIndex: number) => {
       let maxX = 0;
-      productsOnShelf.forEach((p) => {
-        if (!isShelfSurfacePosition(p.placement.position)) return;
-        const meta = metadata.get(p.sku);
-        if (!meta) return;
-
+      products.forEach((p) => {
         const pos = p.placement.position;
-        const startX = pos.x;
-        const facings = p.placement.facings?.horizontal || 1;
-        const productWidth = meta.dimensions.physical.width;
-        const endX = startX + facings * productWidth;
-
-        if (endX > maxX) maxX = endX;
+        if (isShelfSurfacePosition(pos) && pos.shelfIndex === shelfIndex) {
+          const meta = metadata?.get(p.sku);
+          const w =
+            (meta?.dimensions.physical.width || 0) *
+            (p.placement.facings?.horizontal || 1);
+          maxX = Math.max(maxX, pos.x + w);
+        }
       });
       return maxX;
     },
-    [metadata, snapshot],
+    [products, metadata],
   );
 
   const validatePlacement = useCallback(
-    (product: SourceProduct, position: any, ignoreProductId?: string) => {
-      const activeConfig = snapshot?.config || config;
-      if (!activeConfig) return { valid: false, error: "No config" };
-
-      // Simple validation for shelf surface
+    (sku: string, position: any, facings: number, excludeId?: string) => {
+      if (!config || !metadata)
+        return { valid: false, error: "Missing context" };
       if (!isShelfSurfacePosition(position)) return { valid: true };
 
-      // Ensure we have valid numbers for coordinates
-      if (typeof position.x !== "number" || isNaN(position.x)) {
-        return { valid: false, error: "Invalid X coordinate" };
-      }
+      const meta = metadata.get(sku);
+      if (!meta) return { valid: false, error: "No metadata" };
 
-      const meta = metadata.get(product.sku);
-      if (!meta) return { valid: false, error: "Metadata missing" };
-
-      const shelfIndex = position.shelfIndex;
-      // Find shelf
-      const shelves =
-        (activeConfig.fixture.config.shelves as ShelfConfig[]) || [];
-      const shelf = shelves.find((s) => s.index === shelfIndex);
-      if (!shelf) return { valid: false, error: "Shelf not found" };
-
-      const startX = Math.round(position.x * 1000) / 1000;
-      const facings = product.placement.facings?.horizontal || 1;
       const width = meta.dimensions.physical.width * facings;
-      const endX = Math.round((startX + width) * 1000) / 1000;
-      const shelfWidth = activeConfig.fixture.dimensions.width;
-
-      if (startX < -0.1 || endX > shelfWidth + 0.1) {
+      if (
+        position.x < 0 ||
+        position.x + width > config.fixture.dimensions.width
+      ) {
         return { valid: false, error: "Out of bounds" };
       }
 
-      // Overlap
-      const collision = activeConfig.products.some((p) => {
-        if (p.id === product.id || p.id === ignoreProductId) return false;
-        if (!isShelfSurfacePosition(p.placement.position)) return false;
-        if (p.placement.position.shelfIndex !== shelfIndex) return false;
-        if ((p.placement.position.depth || 0) !== (position.depth || 0))
+      const collision = products.some((p) => {
+        if (p.id === excludeId) return false;
+        const pPos = p.placement.position;
+        if (
+          !isShelfSurfacePosition(pPos) ||
+          pPos.shelfIndex !== position.shelfIndex
+        )
           return false;
 
         const pMeta = metadata.get(p.sku);
-        if (!pMeta) return false;
-
-        const pX = Math.round(p.placement.position.x * 1000) / 1000;
         const pW =
-          pMeta.dimensions.physical.width *
+          (pMeta?.dimensions.physical.width || 0) *
           (p.placement.facings?.horizontal || 1);
-        const pEnd = Math.round((pX + pW) * 1000) / 1000;
-
-        return startX < pEnd - 0.5 && endX > pX + 0.5;
+        return (
+          position.x < pPos.x + pW - 0.5 && position.x + width > pPos.x + 0.5
+        );
       });
 
-      if (collision) {
-        return { valid: false, error: "Collision" };
-      }
-
-      return { valid: true, spaceUsed: endX };
+      return collision ? { valid: false, error: "Collision" } : { valid: true };
     },
-    [config, metadata, snapshot],
+    [config, metadata, products],
   );
 
   const findNextAvailablePosition = useCallback(
-    (metadata: ProductMetadata, preferredShelfIndex?: number) => {
-      const activeConfig = snapshot?.config || config;
-      if (!activeConfig) return null;
+    (sku: string, shelfIndex?: number) => {
+      if (!fixture || !metadata) return null;
+      const meta = metadata.get(sku);
+      if (!meta) return null;
 
-      const rawShelves =
-        (activeConfig.fixture.config.shelves as ShelfConfig[]) || [];
-      const shelves = [...rawShelves].sort((a, b) => b.index - a.index);
+      const shelves = (fixture.config.shelves as ShelfConfig[]) || [];
+      const targetIndex = shelfIndex ?? selectedShelfState;
 
-      // Try preferred shelf first
-      if (preferredShelfIndex !== undefined) {
-        const idx = shelves.findIndex((s) => s.index === preferredShelfIndex);
-        if (idx !== -1) {
-          const s = shelves[idx];
-          shelves.splice(idx, 1);
-          shelves.unshift(s);
-        }
-      }
+      // Try target shelf, then all others
+      const checkOrder = [
+        targetIndex,
+        ...shelves.map((s) => s.index).filter((i) => i !== targetIndex),
+      ];
 
-      const pWidth = metadata.dimensions.physical.width;
-      const shelfWidth = activeConfig.fixture.dimensions.width;
-
-      for (const shelf of shelves) {
-        const used = getShelfSpaceUsed(shelf.index, activeConfig.products);
-        if (used + pWidth <= shelfWidth) {
-          return {
-            model: "shelf-surface" as const,
-            shelfIndex: shelf.index,
-            x: used as any,
-            depth: 0 as any,
-          };
+      for (const idx of checkOrder) {
+        const used = getShelfSpaceUsed(idx);
+        if (used + meta.dimensions.physical.width <= fixture.dimensions.width) {
+          return { shelfIndex: idx, x: used, depth: 0 };
         }
       }
       return null;
     },
-    [config, getShelfSpaceUsed, snapshot],
+    [fixture, metadata, getShelfSpaceUsed, selectedShelfState],
   );
 
-  // --- Mutations ---
-
+  // --- Convenience Mutations ---
   const addProduct = useCallback(
-    async (product: SourceProduct) => {
-      await dispatch({ type: "PRODUCT_ADD", product });
+    async (sku: string, position?: any) => {
+      const meta = metadata?.get(sku);
+      if (!meta) return;
+
+      const pos = position || findNextAvailablePosition(sku);
+      if (!pos) {
+        toast.error("No space available");
+        return;
+      }
+
+      const validation = validatePlacement(sku, pos, 1);
+      if (!validation.valid) {
+        toast.error(validation.error);
+        return;
+      }
+
+      await dispatch({
+        type: "PRODUCT_ADD",
+        product: {
+          id: uuidv4(),
+          sku,
+          placement: {
+            position: { model: "shelf-surface", ...pos },
+            facings: createFacingConfig(1, 1),
+          },
+        },
+      });
     },
-    [dispatch],
+    [metadata, findNextAvailablePosition, validatePlacement, dispatch],
   );
 
   const removeProduct = useCallback(
@@ -680,7 +417,6 @@ export function PlanogramEditorProvider({
         silent && sessionStore
           ? sessionStore.dispatchSquashed.bind(sessionStore)
           : dispatch;
-
       await method({
         type: "PRODUCT_UPDATE",
         productId: id,
@@ -691,222 +427,147 @@ export function PlanogramEditorProvider({
     [dispatch, sessionStore],
   );
 
-  const selectProduct = useCallback(
-    (id: string | null) => {
-      setSelectedProductId(id);
-      if (id) {
-        setSelectedShelf(null);
-        sessionStore?.setSelection([id]);
-      } else {
-        sessionStore?.setSelection([]);
-      }
-    },
-    [sessionStore],
-  );
-
   const addShelf = useCallback(async () => {
-    if (!snapshot) return;
-    const currentShelves =
-      (snapshot.config.fixture.config.shelves as ShelfConfig[]) || [];
-    const maxIdx = currentShelves.reduce(
-      (acc, s) => Math.max(acc, s.index),
-      -1,
-    );
-    const maxHeight = currentShelves.reduce(
-      (acc, s) => Math.max(acc, s.baseHeight as number),
-      0,
-    );
-
-    const newShelf: ShelfConfig = {
-      id: generateId(),
-      index: (maxIdx + 1) as ShelfIndex,
-      baseHeight: (maxHeight + 300) as Millimeters,
-    };
+    const current = (fixture?.config.shelves as ShelfConfig[]) || [];
+    const maxIdx = current.reduce((m, s) => Math.max(m, s.index), -1);
+    const maxH = current.reduce((m, s) => Math.max(m, s.baseHeight), 0);
 
     await dispatch({
       type: "FIXTURE_UPDATE",
       config: {
-        shelves: [...currentShelves, newShelf],
+        shelves: [
+          ...current,
+          {
+            id: generateId(),
+            index: (maxIdx + 1) as ShelfIndex,
+            baseHeight: (maxH + 300) as Millimeters,
+          },
+        ],
       },
     });
-  }, [dispatch, snapshot]);
+  }, [dispatch, fixture]);
 
   const removeShelf = useCallback(
     async (index: number) => {
-      if (!snapshot) return;
-      const currentShelves =
-        (snapshot.config.fixture.config.shelves as ShelfConfig[]) || [];
-      const shelves = currentShelves.filter((s) => s.index !== index);
-
-      const actions: any[] = [
-        {
-          type: "FIXTURE_UPDATE",
-          config: { shelves },
-        },
-      ];
-
-      // Remove products on that shelf via individual actions or a batch if we supported it
-      // For now, the projector's applyRemove or similar logic is for products
-      snapshot.config.products.forEach((p: SourceProduct) => {
-        if (
-          isShelfSurfacePosition(p.placement.position) &&
-          p.placement.position.shelfIndex === index
-        ) {
+      const current = (fixture?.config.shelves as ShelfConfig[]) || [];
+      const shelves = current.filter((s) => s.index !== index);
+      const actions: any[] = [{ type: "FIXTURE_UPDATE", config: { shelves } }];
+      products.forEach((p) => {
+        const pos = p.placement.position;
+        if (isShelfSurfacePosition(pos) && pos.shelfIndex === index) {
           actions.push({ type: "PRODUCT_REMOVE", productId: p.id });
         }
       });
-
-      await dispatch({
-        type: "BATCH",
-        actions,
-      } as any);
-
-      setSelectedShelf(null);
+      await dispatch({ type: "BATCH", actions });
     },
-    [dispatch, snapshot],
+    [dispatch, fixture, products],
   );
 
   const updateShelf = useCallback(
     async (index: number, updates: Partial<ShelfConfig>) => {
-      if (!snapshot) return;
-      const currentShelves =
-        (snapshot.config.fixture.config.shelves as ShelfConfig[]) || [];
-
+      const current = (fixture?.config.shelves as ShelfConfig[]) || [];
       await dispatch({
         type: "FIXTURE_UPDATE",
         config: {
-          shelves: currentShelves.map((s) =>
+          shelves: current.map((s) =>
             s.index === index ? { ...s, ...updates } : s,
           ),
         },
       });
     },
-    [dispatch, snapshot],
+    [dispatch, fixture],
   );
 
-  const reindexShelves = useCallback((shelves: ShelfConfig[]) => {
-    return shelves
-      .sort((a, b) => (a.baseHeight as number) - (b.baseHeight as number))
-      .map((s, i) => ({ ...s, index: i as ShelfIndex }));
-  }, []);
+  const reindexShelves = useCallback(async () => {
+    const current = (fixture?.config.shelves as ShelfConfig[]) || [];
+    const sorted = [...current].sort((a, b) => a.baseHeight - b.baseHeight);
+    const reindexed = sorted.map((s, i) => ({ ...s, index: i as ShelfIndex }));
 
-  const reindexShelvesAction = useCallback(async () => {
-    if (!snapshot) return;
-    const currentShelves =
-      (snapshot.config.fixture.config.shelves as ShelfConfig[]) || [];
-    const newShelves = reindexShelves(currentShelves);
-
-    // Map products to new indices based on height
     const actions: any[] = [
-      {
-        type: "FIXTURE_UPDATE",
-        config: { shelves: newShelves },
-      },
+      { type: "FIXTURE_UPDATE", config: { shelves: reindexed } },
     ];
-
-    snapshot.config.products.forEach((p: SourceProduct) => {
-      if (isShelfSurfacePosition(p.placement.position)) {
-        const oldIndex = p.placement.position.shelfIndex;
-        const oldShelf = currentShelves.find((s) => s.index === oldIndex);
-        if (oldShelf) {
-          const newShelf = newShelves.find((s) => s.id === oldShelf.id);
-          if (newShelf && newShelf.index !== oldIndex) {
-            actions.push({
-              type: "PRODUCT_UPDATE",
-              productId: p.id,
-              to: { ...p.placement.position, shelfIndex: newShelf.index },
-            });
-          }
+    products.forEach((p) => {
+      const pos = p.placement.position;
+      if (isShelfSurfacePosition(pos)) {
+        const oldShelf = current.find((s) => s.index === pos.shelfIndex);
+        const newShelf = reindexed.find((s) => s.id === oldShelf?.id);
+        if (newShelf && newShelf.index !== pos.shelfIndex) {
+          actions.push({
+            type: "PRODUCT_UPDATE",
+            productId: p.id,
+            to: { ...pos, shelfIndex: newShelf.index },
+          });
         }
       }
     });
-
-    await dispatch({
-      type: "BATCH",
-      actions,
-    } as any);
-  }, [dispatch, snapshot, reindexShelves]);
-
-  // --- Meta Actions ---
+    await dispatch({ type: "BATCH", actions });
+  }, [dispatch, fixture, products]);
 
   const commit = useCallback(async () => {
-    if (sessionStore) {
-      await sessionStore.commit();
-    }
+    if (sessionStore) await sessionStore.commit();
   }, [sessionStore]);
 
-  const wrappedSavePlanogram = useCallback(async () => {
-    // Swapping the order: commit the session history first, then save the resulting config.
-    // This ensures that the data-layer's hasUnsavedChanges flag is correctly reset to false
-    // after the session-sync effect has finished marking it as dirty.
+  const wrappedSave = useCallback(async () => {
     await commit();
     await savePlanogram();
-  }, [savePlanogram, commit]);
+  }, [commit, savePlanogram]);
 
   const createNewPlanogram = useCallback(async () => {
-    // Load 'mock' as template or empty
     try {
       const mock = await dal.planograms.getById("mock");
       if (mock) {
-        const newConfig: PlanogramConfig = {
+        setConfig({
           ...mock,
           id: uuidv4(),
           name: "New Planogram",
           createdAt: Date.now(),
           updatedAt: Date.now(),
-        };
-        setConfig(newConfig);
-        setSelectedProductId(null);
-        setSelectedShelf(null);
+        });
         toast.info("Created new planogram");
       }
     } catch (e) {
-      console.error(e);
-      toast.error("Failed to create new planogram");
+      toast.error("Failed to create");
     }
   }, [setConfig]);
 
   const renamePlanogram = useCallback(
     async (name: string) => {
       if (!config) return;
-      // Optimistic update
       updateConfig((prev) => ({ ...prev, name }));
-      // Save
-      // Ideally we save with new name.
-      // We rely on savePlanogram from data context which uses current config.
-      // But we should probably await the save here.
-      // Since updateConfig updates state, we might need to wait for render or use the functional update result in save.
-      // But savePlanogram uses 'config' from state, which might be stale in this closure.
-      // Actually savePlanogram in DataContext uses config from state.
-      // To ensure consistency, we might need to save explicitly or just let the user hit save.
-      // But original renamePlanogram did save.
-      // We'll trust the user to hit save or trigger it.
-      // Or we can invoke dal directly.
       try {
         await dal.planograms.save(config.id, { ...config, name });
-        refreshSavedPlanograms();
         toast.success(`Renamed to ${name}`);
       } catch (e) {
         toast.error("Failed to rename");
       }
     },
-    [config, updateConfig, refreshSavedPlanograms],
+    [config, updateConfig],
   );
 
-  const value = {
+  const setPlanogramName = useCallback(
+    (name: string) => {
+      updateConfig((prev) => ({ ...prev, name }));
+    },
+    [updateConfig],
+  );
+
+  const value: PlanogramEditorContextType = {
+    fixture,
+    products,
+    productMetadata,
+    renderInstances,
+    snapshot,
     selectedProductId,
     setSelectedProductId,
-    selectedShelf,
-    setSelectedShelf,
+    selectedShelf: selectedShelfState,
+    setSelectedShelf: setSelectedShelfState,
     viewport,
     setViewport,
     zoomAt,
+    applyZoom,
     panBy,
     fitToScreen,
     unprojectPoint,
-    validatePlacement,
-    findNextAvailablePosition,
-    getShelfSpaceUsed,
     addProduct,
     removeProduct,
     updateProduct,
@@ -915,20 +576,27 @@ export function PlanogramEditorProvider({
     removeShelf,
     updateShelf,
     reindexShelves,
-    reindexShelvesAction,
-    renderInstances,
-    snapshot,
     undo,
     redo,
     canUndo,
     canRedo,
     isProjecting,
-    savePlanogram: wrappedSavePlanogram,
+    hasUnsavedChanges: dataDirty || (snapshot?.session.actionCount ?? 0) > 0,
     commit,
-    savedPlanograms,
-    refreshSavedPlanograms,
+    planogramName: config?.name || "Untitled",
+    setPlanogramName,
+    savePlanogram: wrappedSave,
+    isSaving,
     createNewPlanogram,
     renamePlanogram,
+    savedPlanograms,
+    refreshSavedPlanograms,
+    getRenderInstances: () => renderInstances,
+    getVisibleInstances: () => renderInstances,
+    resizeViewport: () => {},
+    getShelfSpaceUsed,
+    validatePlacement,
+    findNextAvailablePosition,
   };
 
   return (

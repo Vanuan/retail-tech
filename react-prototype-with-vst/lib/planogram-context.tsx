@@ -2,10 +2,7 @@
 
 import { ReactNode } from "react";
 import { PlanogramDataProvider } from "./planogram-data-context";
-import {
-  PlanogramEditorProvider,
-  usePlanogram as useEditorPlanogram,
-} from "./planogram-editor-context";
+import { PlanogramEditorProvider } from "./planogram-editor-context";
 
 /**
  * Legacy PlanogramProvider wrapper.
@@ -25,8 +22,6 @@ export function PlanogramProvider({
     </PlanogramDataProvider>
   );
 }
-
-export const usePlanogram = useEditorPlanogram;
 
 // Re-export types for backward compatibility
 export type {

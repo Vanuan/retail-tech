@@ -1,5 +1,5 @@
 import { PlanogramConfig } from "@vst/vocabulary-types";
-import { IPlanogramSequenceRoller } from "../types/contract";
+import { IPlanogramReducer } from "../interfaces/IPlanogramReducer";
 import { PlanogramAction } from "../types/actions";
 import { PlanogramSnapshot } from "../types/state";
 import { HistoryStack } from "./HistoryStack";
@@ -13,7 +13,7 @@ import { HistoryStack } from "./HistoryStack";
 export class SessionStore {
   private baseConfig: PlanogramConfig;
   private history: HistoryStack;
-  private roller: IPlanogramSequenceRoller;
+  private reducer: IPlanogramReducer;
   private selection: string[] = [];
   private listeners: Set<(snapshot: PlanogramSnapshot) => void> = new Set();
   private projectionId: number = 0;
@@ -24,9 +24,9 @@ export class SessionStore {
   // State flags
   public isProjecting: boolean = false;
 
-  constructor(base: PlanogramConfig, roller: IPlanogramSequenceRoller) {
+  constructor(base: PlanogramConfig, reducer: IPlanogramReducer) {
     this.baseConfig = base;
-    this.roller = roller;
+    this.reducer = reducer;
     this.history = new HistoryStack();
 
     // Trigger initial projection
@@ -149,7 +149,7 @@ export class SessionStore {
     this.isProjecting = true;
     try {
       const actions = this.history.activeActions;
-      const snapshot = await this.roller.roll(this.baseConfig, actions);
+      const snapshot = await this.reducer.reduce(this.baseConfig, actions);
 
       // Concurrency Guard: If a newer projection has started, ignore this result.
       // This prevents out-of-order updates from overwriting the latest state.
