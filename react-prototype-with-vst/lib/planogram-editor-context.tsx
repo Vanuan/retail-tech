@@ -127,10 +127,6 @@ export function usePlanogramEditor() {
   return context;
 }
 
-/**
- * Main application hook.
- * Alias for usePlanogramEditor to provide a clean API for components.
- */
 export function usePlanogram() {
   return usePlanogramEditor();
 }
@@ -153,16 +149,11 @@ export function PlanogramEditorProvider({
 
   // --- Session ---
   const {
+    session,
     snapshot,
-    dispatch,
-    undo,
-    redo,
     canUndo,
     canRedo,
     isProjecting,
-    store: sessionStore,
-    suggestPlacement,
-    validateIntent,
   } = usePlanogramSession(config, metadata, dal);
 
   useEffect(() => {
@@ -173,7 +164,6 @@ export function PlanogramEditorProvider({
   const products = snapshot?.config.products || config?.products || [];
   const fixture = snapshot?.config.fixture || config?.fixture || null;
 
-  // Convert metadata Map to Record for easier consumption in components
   const productMetadata = useMemo(() => {
     const record: Record<string, ProductMetadata> = {};
     metadata?.forEach((m, sku) => {
@@ -191,9 +181,9 @@ export function PlanogramEditorProvider({
   const selectProduct = useCallback(
     (id: string | null) => {
       setSelectedProductId(id);
-      sessionStore?.setSelection(id ? [id] : []);
+      session?.setSelection(id ? [id] : []);
     },
-    [sessionStore],
+    [session],
   );
 
   // --- Viewport ---
@@ -297,14 +287,14 @@ export function PlanogramEditorProvider({
   // --- Convenience Mutations ---
   const addProduct = useCallback(
     async (sku: string, position?: any) => {
+      if (!session) return;
       const meta = metadata?.get(sku);
       if (!meta) return;
 
       let targetPos = position;
 
-      // If no position provided, ask the Authority for a suggestion
       if (!targetPos) {
-        const suggestion = suggestPlacement({
+        const suggestion = session.suggestPlacement({
           sku,
           preferredShelf: selectedShelfState as ShelfIndex,
         });
@@ -317,12 +307,10 @@ export function PlanogramEditorProvider({
         }
       }
 
-      // Handle partial positions (e.g. from simple UI drops)
       if (targetPos && !targetPos.model) {
         targetPos = { model: "shelf-surface", ...targetPos };
       }
 
-      // Create the intent
       const action = PlanogramActions.addProduct({
         id: uuidv4(),
         sku,
@@ -330,31 +318,25 @@ export function PlanogramEditorProvider({
         facings: createFacingConfig(1, 1),
       });
 
-      // Validate the intent with the Authority
-      const validation = validateIntent(action);
+      const validation = session.stage(action);
       if (!validation.valid) {
         toast.error(validation.errors[0]?.message || "Invalid placement");
         return;
       }
-
-      await dispatch(action);
     },
-    [metadata, suggestPlacement, validateIntent, dispatch, selectedShelfState],
+    [metadata, session, selectedShelfState],
   );
 
   const removeProduct = useCallback(
     async (productId: string) => {
-      await dispatch(PlanogramActions.removeProduct(productId));
+      session?.stage(PlanogramActions.removeProduct(productId));
     },
-    [dispatch],
+    [session],
   );
 
   const updateProduct = useCallback(
     async (id: string, updates: Partial<SourceProduct>, silent?: boolean) => {
-      const method =
-        silent && sessionStore
-          ? sessionStore.dispatchSquashed.bind(sessionStore)
-          : dispatch;
+      if (!session) return;
 
       const actions: PlanogramAction[] = [];
 
@@ -378,31 +360,35 @@ export function PlanogramEditorProvider({
 
       if (actions.length === 0) return;
 
+      const method = silent ? session.stageTransient : session.stage;
+
       if (actions.length === 1) {
-        await method(actions[0]);
+        method(actions[0]);
       } else {
-        await method(PlanogramActions.batch(actions));
+        method(PlanogramActions.batch(actions));
       }
     },
-    [dispatch, sessionStore],
+    [session],
   );
 
   const addShelf = useCallback(async () => {
+    if (!session) return;
     const current = (fixture?.config.shelves as ShelfConfig[]) || [];
     const maxIdx = current.reduce((m, s) => Math.max(m, s.index), -1);
     const maxH = current.reduce((m, s) => Math.max(m, s.baseHeight), 0);
 
-    await dispatch(
+    session.stage(
       PlanogramActions.addShelf({
         id: generateId(),
         index: (maxIdx + 1) as ShelfIndex,
         baseHeight: (maxH + 300) as Millimeters,
       }),
     );
-  }, [dispatch, fixture]);
+  }, [session, fixture]);
 
   const removeShelf = useCallback(
     async (index: number) => {
+      if (!session) return;
       const actions: PlanogramAction[] = [
         PlanogramActions.removeShelf(index as ShelfIndex),
       ];
@@ -413,21 +399,22 @@ export function PlanogramEditorProvider({
           actions.push(PlanogramActions.removeProduct(p.id));
         }
       });
-      await dispatch(PlanogramActions.batch(actions));
+      session.stage(PlanogramActions.batch(actions));
     },
-    [dispatch, products],
+    [session, products],
   );
 
   const updateShelf = useCallback(
     async (index: number, updates: Partial<ShelfConfig>) => {
-      await dispatch(
+      session?.stage(
         PlanogramActions.updateShelf({ index: index as ShelfIndex, updates }),
       );
     },
-    [dispatch],
+    [session],
   );
 
   const reindexShelves = useCallback(async () => {
+    if (!session) return;
     const current = (fixture?.config.shelves as ShelfConfig[]) || [];
     const sorted = [...current].sort((a, b) => a.baseHeight - b.baseHeight);
     const reindexed = sorted.map((s, i) => ({ ...s, index: i as ShelfIndex }));
@@ -453,12 +440,20 @@ export function PlanogramEditorProvider({
         }
       }
     });
-    await dispatch(PlanogramActions.batch(actions));
-  }, [dispatch, fixture, products]);
+    session.stage(PlanogramActions.batch(actions));
+  }, [session, fixture, products]);
+
+  const undo = useCallback(async () => {
+    session?.undo();
+  }, [session]);
+
+  const redo = useCallback(async () => {
+    session?.redo();
+  }, [session]);
 
   const commit = useCallback(async () => {
-    if (sessionStore) await sessionStore.commit();
-  }, [sessionStore]);
+    if (session) await session.commit();
+  }, [session]);
 
   const wrappedSave = useCallback(async () => {
     await commit();
@@ -569,8 +564,8 @@ export function PlanogramEditorProvider({
     getVisibleInstances: () => renderInstances,
     resizeViewport: () => {},
     getShelfSpaceUsed,
-    suggestPlacement,
-    validateIntent,
+    suggestPlacement: (input) => session?.suggestPlacement(input) || null,
+    validateIntent: (action) => session?.validate(action) || { valid: false, canRender: false, errors: [], warnings: [] },
   };
 
   return (

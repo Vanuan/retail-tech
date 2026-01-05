@@ -1,5 +1,4 @@
-import { IFixtureRepository } from "../../types/repositories/interfaces";
-import { FixtureConfig } from "../../types/planogram/config";
+import { IFixtureRepository, FixtureConfig } from "@vst/vocabulary-types";
 import { DEFAULT_FIXTURE } from "./mock-data";
 
 /**

@@ -7,6 +7,7 @@ import {
   FixtureConfig,
   ZIndex,
   Millimeters,
+  DepthLevel,
   DepthCategory,
   IDataAccessLayer,
   ICoreProcessor,
@@ -82,59 +83,100 @@ export class CoreProcessor implements ICoreProcessor {
   /**
    * Calculates the best placement for a product based on business rules.
    */
-  suggestPlacement(input: PlacementSuggestionInput): PlacementSuggestion {
+  suggestPlacement(
+    input: PlacementSuggestionInput,
+  ): PlacementSuggestion | null {
     const { sku, preferredShelf, constraints, config, metadata } = input;
     const meta = metadata.get(sku);
 
     if (!meta) {
-      throw new Error(
-        `Cannot suggest placement: Metadata not found for ${sku}`,
-      );
+      console.error(`Cannot suggest placement: Metadata not found for ${sku}`);
+      return null;
     }
 
     const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
+    const allIndices = shelves.map((s) => s.index as ShelfIndex);
+
+    if (allIndices.length === 0) return null;
 
     // Determine shelf check order
     let checkOrder: ShelfIndex[] = [];
 
     if (constraints?.allowedShelves) {
-      checkOrder = constraints.allowedShelves;
+      checkOrder = constraints.allowedShelves.filter((i) =>
+        allIndices.includes(i),
+      );
     } else {
-      const targetIndex = preferredShelf ?? 0; // Default to 0 if undefined
-      const allIndices = shelves.map((s) => s.index as ShelfIndex);
+      const targetIndex =
+        preferredShelf !== undefined && allIndices.includes(preferredShelf)
+          ? preferredShelf
+          : allIndices[0];
+
       checkOrder = [
         targetIndex as ShelfIndex,
         ...allIndices.filter((i) => i !== targetIndex),
       ];
     }
 
-    // Scan shelves for space
-    for (const shelfIndex of checkOrder) {
-      const shelfWidth = config.fixture.dimensions.width;
-      const usedWidth = this.getShelfSpaceUsed(config, metadata, shelfIndex);
+    // Scan shelves for space (prefer front rows across all allowed shelves)
+    for (const depth of [0, 1, 2, 3] as const) {
+      for (const shelfIndex of checkOrder) {
+        const shelfWidth = config.fixture.dimensions.width;
+        const productWidth = meta.dimensions.physical.width;
 
-      if (usedWidth + meta.dimensions.physical.width <= shelfWidth) {
-        return {
-          position: {
-            model: "shelf-surface",
-            shelfIndex,
-            x: usedWidth as Millimeters,
-            depth: 0,
-          } as ShelfSurfacePosition,
-        };
+        // Get all products already on this shelf and depth
+        const existingProducts = config.products
+          .filter((p) => {
+            const pos = p.placement.position;
+            return (
+              isShelfSurfacePosition(pos) &&
+              pos.shelfIndex === shelfIndex &&
+              (pos.depth || 0) === depth
+            );
+          })
+          .map((p) => {
+            const pMeta = metadata.get(p.sku);
+            const pW =
+              (pMeta?.dimensions.physical.width || 0) *
+              (p.placement.facings?.horizontal || 1);
+            return {
+              x: (p.placement.position as ShelfSurfacePosition).x,
+              width: pW,
+            };
+          })
+          .sort((a, b) => a.x - b.x);
+
+        // Candidate positions: Start of shelf, and after every existing product
+        const candidates = [0, ...existingProducts.map((p) => p.x + p.width)];
+
+        for (const candidateX of candidates) {
+          if (candidateX + productWidth > shelfWidth) continue;
+
+          // Check for collision at this candidate position
+          const hasCollision = existingProducts.some((p) => {
+            return (
+              candidateX < p.x + p.width - 0.5 &&
+              candidateX + productWidth > p.x + 0.5
+            );
+          });
+
+          if (!hasCollision) {
+            const suggested = {
+              position: {
+                model: "shelf-surface",
+                shelfIndex,
+                x: candidateX as Millimeters,
+                depth: depth as DepthLevel,
+              } as ShelfSurfacePosition,
+            };
+            return suggested;
+          }
+        }
       }
     }
 
-    // Fallback: If no space found, suggest start of preferred shelf (will collide, but valid syntax)
-    // In a real system, we might want to return "null" or throw, but the interface demands a suggestion.
-    return {
-      position: {
-        model: "shelf-surface",
-        shelfIndex: preferredShelf ?? (0 as ShelfIndex),
-        x: 0 as Millimeters,
-        depth: 0,
-      } as ShelfSurfacePosition,
-    };
+    // No space found on any allowed shelf
+    return null;
   }
 
   /**
@@ -407,11 +449,16 @@ export class CoreProcessor implements ICoreProcessor {
     config: PlanogramConfig,
     metadata: ReadonlyMap<string, ProductMetadata>,
     shelfIndex: number,
+    depth: number = 0,
   ): number {
     let maxX = 0;
     for (const p of config.products) {
       const pos = p.placement.position;
-      if (isShelfSurfacePosition(pos) && pos.shelfIndex === shelfIndex) {
+      if (
+        isShelfSurfacePosition(pos) &&
+        pos.shelfIndex === shelfIndex &&
+        (pos.depth || 0) === depth
+      ) {
         const meta = metadata.get(p.sku);
         if (meta) {
           const w =
@@ -475,7 +522,8 @@ export class CoreProcessor implements ICoreProcessor {
       const pPos = p.placement.position;
       if (
         !isShelfSurfacePosition(pPos) ||
-        pPos.shelfIndex !== position.shelfIndex
+        pPos.shelfIndex !== position.shelfIndex ||
+        (pPos.depth || 0) !== (position.depth || 0)
       )
         return false;
 

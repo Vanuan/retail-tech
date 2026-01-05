@@ -1,5 +1,4 @@
-import { IProductRepository } from "../../types/repositories/interfaces";
-import { ProductMetadata } from "../../types/planogram/metadata";
+import { IProductRepository, ProductMetadata } from "@vst/vocabulary-types";
 import { PRODUCT_CATALOG } from "./mock-data";
 
 /**

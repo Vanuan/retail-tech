@@ -40,7 +40,7 @@ export interface ICoreProcessor {
    * Calculates the best placement for a product based on business rules.
    * Pure intent service - does not modify state.
    */
-  suggestPlacement(input: PlacementSuggestionInput): PlacementSuggestion;
+  suggestPlacement(input: PlacementSuggestionInput): PlacementSuggestion | null;
 
   /**
    * Validates if an action is permissible under business rules.

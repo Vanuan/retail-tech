@@ -1,4 +1,12 @@
-import { PlanogramConfig, RenderInstance, ValidationResult, ProductMetadata, Millimeters } from "@vst/vocabulary-types";
+import {
+  PlanogramConfig,
+  RenderInstance,
+  ValidationResult,
+  ProductMetadata,
+  Millimeters,
+  IPlanogramSnapshot,
+  FixtureConfig,
+} from "@vst/vocabulary-types";
 
 /**
  * Hit Target types for semantic selection
@@ -22,7 +30,7 @@ export interface HitTarget {
  * The immutable result of projecting Actions onto a Base Config.
  * This object contains EVERYTHING the UI needs to render a frame.
  */
-export interface PlanogramSnapshot {
+export interface PlanogramSnapshot extends IPlanogramSnapshot {
   /**
    * The Derived L1 State
    * (Base Config + Applied Actions)
@@ -34,6 +42,22 @@ export interface PlanogramSnapshot {
    * (The "Pixel Truth" ready for Canvas/WebGL)
    */
   renderInstances: RenderInstance[];
+
+  /**
+   * The Fixture definition used for this projection.
+   */
+  fixture: FixtureConfig;
+
+  /**
+   * Processing metadata (timings, counts)
+   */
+  metadata: {
+    totalInstances: number;
+    validInstances: number;
+    invalidCount: number;
+    processingTime: number;
+    processingErrors?: any[];
+  };
 
   /**
    * The Verification State

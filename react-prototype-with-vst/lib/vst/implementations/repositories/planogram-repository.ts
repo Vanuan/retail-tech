@@ -1,5 +1,4 @@
-import { IPlanogramRepository } from "../../types/repositories/interfaces";
-import { PlanogramConfig } from "../../types/planogram/config";
+import { IPlanogramRepository, PlanogramConfig } from "@vst/vocabulary-types";
 import { MOCK_PLANOGRAM } from "./mock-data";
 import { planogramStorage } from "./storage";
 

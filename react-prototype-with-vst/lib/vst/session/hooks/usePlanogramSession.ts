@@ -1,20 +1,20 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   PlanogramConfig,
   ProductMetadata,
   ICoreProcessor,
-  PlacementSuggestion,
-  PlacementSuggestionInput,
   PlanogramAction,
   ValidationResult,
-  ValidationErrorCode,
+  IPlanogramSession,
+  PlacementSuggestionInput,
 } from "@vst/vocabulary-types";
 import { SessionStore } from "../store/SessionStore";
 import { CoreActionReducer } from "../reduction/CoreActionReducer";
 import { CoreSnapshotProjector } from "../projection/CoreSnapshotProjector";
 import { PlanogramReducer } from "../facade/PlanogramReducer";
 import { CoreProcessor } from "../../implementations/core/processor";
-import { useSessionStore, UseSessionStoreResult } from "./useSessionStore";
+import { useSessionStore } from "./useSessionStore";
+import { PlanogramSnapshot } from "../types/state";
 
 export interface UsePlanogramSessionOptions {
   /**
@@ -25,69 +25,46 @@ export interface UsePlanogramSessionOptions {
   processor?: ICoreProcessor;
 }
 
-export interface UsePlanogramSessionResult extends UseSessionStoreResult {
+export interface UsePlanogramSessionResult {
+  /**
+   * The session facade for interacting with the planogram.
+   */
+  session: IPlanogramSession | null;
+
+  /**
+   * The current renderable snapshot.
+   */
+  snapshot: PlanogramSnapshot | null;
+
   /**
    * A boolean flag indicating if the session is fully initialized and ready.
-   * This becomes true once `config`, `metadata`, the `store`, and the initial
-   * `snapshot` are all available.
    */
   isReady: boolean;
 
   /**
-   * The underlying `SessionStore` instance. This is exposed for advanced
-   * use cases that require direct interaction with the store, such as
-   * committing changes.
+   * Status flags from the underlying store.
    */
-  store: SessionStore | null;
-
-  suggestPlacement(
-    input: Omit<PlacementSuggestionInput, "config" | "metadata">,
-  ): PlacementSuggestion | null;
-
-  validateIntent(action: PlanogramAction): ValidationResult;
+  canUndo: boolean;
+  canRedo: boolean;
+  isProjecting: boolean;
 }
 
 /**
  * A comprehensive React hook that encapsulates all the logic for managing a
- * planogram editing session. It handles the instantiation of the processor,
- * reducer, and store, and subscribes to state changes.
- *
- * @example
- * ```tsx
- * const session = usePlanogramSession(config, metadata, dal);
- *
- * if (!session.isReady) return <Loading />;
- *
- * return (
- *   <Canvas
- *     snapshot={session.snapshot}
- *     onProductMove={(id, pos) => session.dispatch({
- *       type: "PRODUCT_MOVE",
- *       productId: id,
- *       to: pos
- *     })}
- *   />
- * );
- * ```
- *
- * @param config The planogram configuration data (L1). The session will re-initialize if the ID of this object changes.
- * @param metadata A map of product SKU to its corresponding metadata.
- * @param dal The data access layer, required by the `CoreProcessor` to fetch necessary data.
- * @param options An optional object to provide a custom processor.
- * @returns A state object containing the latest snapshot, dispatch functions, and session status.
+ * planogram editing session.
  */
 export function usePlanogramSession(
   config: PlanogramConfig | null,
   metadata: Map<string, ProductMetadata> | null,
-  dal: any, // In a real app, this would have a proper DAL interface type
+  dal: any,
   options?: UsePlanogramSessionOptions,
 ): UsePlanogramSessionResult {
-  // 1. Memoize the processor. It's stable as long as the DAL and custom processor don't change.
+  // 1. Memoize the processor.
   const processor = useMemo(() => {
     return options?.processor || new CoreProcessor(dal);
   }, [dal, options?.processor]);
 
-  // 2. Memoize the reducer/projector facade. This re-initializes if the processor or metadata changes.
+  // 2. Memoize the reducer/projector facade.
   const reducer = useMemo(() => {
     if (!metadata) return null;
 
@@ -101,69 +78,83 @@ export function usePlanogramSession(
   const [store, setStore] = useState<SessionStore | null>(null);
 
   useEffect(() => {
-    // A new store is created only when a valid config and reducer are available.
     if (config && reducer) {
       const newStore = new SessionStore(config, reducer);
       setStore(newStore);
-
-      // The effect cleanup function can be used for future disposal logic.
       return () => {
-        // e.g., newStore.dispose();
+        // cleanup if needed
       };
     } else {
-      // If config or reducer is missing, ensure the store is cleared.
       setStore(null);
     }
-    // This effect runs when the planogram's identity changes (via config.id) or the reducer is rebuilt.
   }, [config?.id, reducer]);
 
-  // 4. Use the low-level hook to subscribe the component to store updates.
+  // 4. Use the low-level hook to subscribe to store updates.
   const sessionResult = useSessionStore(store);
 
-  // 5. Expose intent services (Placement & Validation)
-  const suggestPlacement = useCallback(
-    (input: Omit<PlacementSuggestionInput, "config" | "metadata">) => {
-      if (!sessionResult.snapshot || !metadata) return null;
+  // 5. Create the Session Facade
+  const sessionFacade = useMemo<IPlanogramSession | null>(() => {
+    if (!store || !metadata || !sessionResult.snapshot) return null;
 
-      return processor.suggestPlacement({
-        ...input,
-        config: sessionResult.snapshot.config,
-        metadata: metadata,
-      });
-    },
-    [processor, metadata, sessionResult.snapshot],
-  );
+    return {
+      snapshot: sessionResult.snapshot,
 
-  const validateIntent = useCallback(
-    (action: PlanogramAction): ValidationResult => {
-      if (!sessionResult.snapshot || !metadata) {
-        return {
-          valid: false,
-          canRender: false,
-          errors: [
-            {
-              code: "SYSTEM_NOT_READY" as ValidationErrorCode,
-              message: "System not ready",
-            },
-          ],
-          warnings: [],
-        };
-      }
+      validate: (action: PlanogramAction) => {
+        return processor.validateIntent(action, {
+          config: sessionResult.snapshot!.config,
+          metadata,
+        });
+      },
 
-      return processor.validateIntent(action, {
-        config: sessionResult.snapshot.config,
-        metadata: metadata,
-      });
-    },
-    [processor, metadata, sessionResult.snapshot],
-  );
+      stage: (action: PlanogramAction) => {
+        const validation = processor.validateIntent(action, {
+          config: sessionResult.snapshot!.config,
+          metadata,
+        });
+        
+        if (validation.valid) {
+          store.dispatch(action);
+        }
+        return validation;
+      },
 
-  // 6. Return the combined, user-friendly result object.
+      stageTransient: (action: PlanogramAction) => {
+        const validation = processor.validateIntent(action, {
+          config: sessionResult.snapshot!.config,
+          metadata,
+        });
+
+        if (validation.valid) {
+          store.dispatchSquashed(action);
+        }
+        return validation;
+      },
+
+      undo: () => { store.undo(); },
+      redo: () => { store.redo(); },
+      commit: () => store.commit(),
+
+      setSelection: (ids: string[]) => {
+        store.setSelection(ids);
+      },
+
+      suggestPlacement: (input: Omit<PlacementSuggestionInput, "config" | "metadata">) => {
+        return processor.suggestPlacement({
+          ...input,
+          config: sessionResult.snapshot!.config,
+          metadata,
+        });
+      },
+    };
+  }, [store, processor, metadata, sessionResult.snapshot]);
+
+  // 6. Return the combined result object.
   return {
-    ...sessionResult,
+    session: sessionFacade,
+    snapshot: sessionResult.snapshot,
     isReady: !!(config && metadata && store && sessionResult.snapshot),
-    store,
-    suggestPlacement,
-    validateIntent,
+    canUndo: sessionResult.canUndo,
+    canRedo: sessionResult.canRedo,
+    isProjecting: sessionResult.isProjecting,
   };
 }

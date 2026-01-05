@@ -6,14 +6,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus } from "lucide-react";
 
 export function ProductPanel() {
-  const { productMetadata, addProduct, selectedShelf } = usePlanogram();
+  const { productMetadata, addProduct } = usePlanogram();
 
   const handleAddProduct = (sku: string) => {
-    addProduct(sku, {
-      model: "shelf-surface",
-      shelfIndex: selectedShelf,
-      depth: 0,
-    } as any);
+    // Passing no position allows the Authority (CoreProcessor) to suggest the best placement
+    addProduct(sku);
   };
 
   return (

@@ -76,13 +76,3 @@ export function useSessionStore(
     isProjecting: store?.isProjecting ?? false,
   };
 }
-
-/**
- * @deprecated Use `usePlanogram` for a simpler setup, or `useSessionStore` if you need to pass a manual store.
- */
-export const usePlanogramSession = useSessionStore;
-
-/**
- * @deprecated Use `UseSessionStoreResult` instead.
- */
-export type UsePlanogramSessionResult = UseSessionStoreResult;
