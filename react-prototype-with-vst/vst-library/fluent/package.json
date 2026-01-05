@@ -1,0 +1,11 @@
+{
+  "name": "@vst/fluent",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "sideEffects": false,
+  "dependencies": {
+    "@vst/vocabulary-types": "*",
+    "@vst/vocabulary-actions": "*"
+  }
+}

@@ -111,7 +111,7 @@ export function usePlanogramSession(
           config: sessionResult.snapshot!.config,
           metadata,
         });
-        
+
         if (validation.valid) {
           store.dispatch(action);
         }
@@ -130,15 +130,17 @@ export function usePlanogramSession(
         return validation;
       },
 
-      undo: () => { store.undo(); },
-      redo: () => { store.redo(); },
+      undo: () => store.undo(),
+      redo: () => store.redo(),
       commit: () => store.commit(),
 
       setSelection: (ids: string[]) => {
         store.setSelection(ids);
       },
 
-      suggestPlacement: (input: Omit<PlacementSuggestionInput, "config" | "metadata">) => {
+      suggestPlacement: (
+        input: Omit<PlacementSuggestionInput, "config" | "metadata">,
+      ) => {
         return processor.suggestPlacement({
           ...input,
           config: sessionResult.snapshot!.config,

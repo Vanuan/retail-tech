@@ -18,6 +18,8 @@ import {
   PlacementSuggestion,
   ValidationContext,
   ValidationResult,
+  ValidationError,
+  ValidationWarning,
   ValidationErrorCode,
   ShelfIndex,
   ShelfConfig,
@@ -86,7 +88,10 @@ export class CoreProcessor implements ICoreProcessor {
   suggestPlacement(
     input: PlacementSuggestionInput,
   ): PlacementSuggestion | null {
-    const { sku, preferredShelf, constraints, config, metadata } = input;
+    const { sku, preferredShelf, constraints, metadata, actions } = input;
+    const config = actions
+      ? this.applyActions(input.config, actions)
+      : input.config;
     const meta = metadata.get(sku);
 
     if (!meta) {
@@ -186,7 +191,10 @@ export class CoreProcessor implements ICoreProcessor {
     action: PlanogramAction,
     context: ValidationContext,
   ): ValidationResult {
-    const { config, metadata } = context;
+    const { metadata, actions } = context;
+    const config = actions
+      ? this.applyActions(context.config, actions)
+      : context.config;
 
     switch (action.type) {
       case "PRODUCT_ADD":
@@ -247,6 +255,37 @@ export class CoreProcessor implements ICoreProcessor {
           action.facings.horizontal,
           action.productId,
         );
+      }
+
+      case "BATCH": {
+        let currentConfig = config;
+        let valid = true;
+        let canRender = true;
+        const errors: ValidationError[] = [];
+        const warnings: ValidationWarning[] = [];
+
+        for (const subAction of action.actions) {
+          const result = this.validateIntent(subAction, {
+            config: currentConfig,
+            metadata,
+          });
+
+          if (!result.valid) valid = false;
+          if (!result.canRender) canRender = false;
+          errors.push(...result.errors);
+          warnings.push(...result.warnings);
+
+          if (result.valid) {
+            currentConfig = this.reduceAction(currentConfig, subAction);
+          }
+        }
+
+        return {
+          valid,
+          canRender,
+          errors,
+          warnings,
+        };
       }
 
       // TODO: Implement validation for other actions

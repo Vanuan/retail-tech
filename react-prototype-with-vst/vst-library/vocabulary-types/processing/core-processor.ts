@@ -73,9 +73,11 @@ export interface PlacementSuggestionInput {
   // Context required for pure calculation
   readonly config: PlanogramConfig;
   readonly metadata: ReadonlyMap<string, ProductMetadata>;
+  readonly actions?: readonly PlanogramAction[];
 }
 
 export interface ValidationContext {
   readonly config: PlanogramConfig;
   readonly metadata: ReadonlyMap<string, ProductMetadata>;
+  readonly actions?: readonly PlanogramAction[];
 }
