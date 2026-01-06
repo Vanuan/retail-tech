@@ -1,43 +1,20 @@
+/**
+ * VOCABULARY FACTORIES
+ * Helper functions for creating semantic positions and configurations
+ * with sensible defaults.
+ */
+
 import {
-  FacingConfig,
   ShelfSurfacePosition,
   PegboardGridPosition,
   Freeform3DPosition,
   BasketBinPosition,
+  FacingConfig,
   FacingCount,
   Millimeters,
   ShelfIndex,
   DepthLevel,
 } from "@vst/vocabulary-types";
-
-/**
- * Helper to create a FacingConfig.
- */
-export function createFacingConfig(
-  horizontal: number,
-  vertical: number = 1,
-): FacingConfig {
-  return {
-    horizontal: horizontal as FacingCount,
-    vertical: vertical as FacingCount,
-  };
-}
-
-/**
- * Helper to convert UI inputs (numbers) to Domain Types (Millimeters)
- */
-export function createShelfPosition(input: {
-  x: number;
-  shelfIndex: number;
-  depth: number;
-}): ShelfSurfacePosition {
-  return {
-    model: "shelf-surface",
-    x: input.x as Millimeters,
-    shelfIndex: input.shelfIndex as ShelfIndex,
-    depth: input.depth as DepthLevel,
-  };
-}
 
 /**
  * Creates a shelf surface position with sensible defaults.
@@ -59,7 +36,7 @@ export function createPegboardGridPosition(
 ): PegboardGridPosition {
   return {
     model: "pegboard-grid",
-    gridSpacing: 25.4 as any, // Default to 1-inch standard
+    gridSpacing: 25.4 as Millimeters, // Default to 1-inch standard
     ...params,
   };
 }
@@ -85,5 +62,35 @@ export function createBasketBinPosition(
   return {
     model: "basket-bin",
     ...params,
+  };
+}
+
+/**
+ * Helper to convert UI inputs (numbers) to Domain Types (Millimeters/Indices)
+ * Useful when receiving raw numbers from forms or sliders.
+ */
+export function createShelfPosition(input: {
+  x: number;
+  shelfIndex: number;
+  depth: number;
+}): ShelfSurfacePosition {
+  return {
+    model: "shelf-surface",
+    x: input.x as Millimeters,
+    shelfIndex: input.shelfIndex as ShelfIndex,
+    depth: input.depth as DepthLevel,
+  };
+}
+
+/**
+ * Helper to create a FacingConfig with derived total.
+ */
+export function createFacingConfig(
+  horizontal: number,
+  vertical: number = 1,
+): FacingConfig {
+  return {
+    horizontal: horizontal as FacingCount,
+    vertical: vertical as FacingCount,
   };
 }

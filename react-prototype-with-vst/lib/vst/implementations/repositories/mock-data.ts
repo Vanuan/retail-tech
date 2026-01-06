@@ -7,7 +7,7 @@ import {
   SourceProduct,
   ShelfSurfacePosition,
 } from "@vst/vocabulary-types";
-import { createFacingConfig } from "@vst/utils";
+import { createFacingConfig } from "@vst/vocabulary-logic";
 
 export const PRODUCT_CATALOG: Record<string, ProductMetadata> = {
   "COKE-001": {

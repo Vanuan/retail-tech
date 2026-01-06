@@ -7,7 +7,7 @@ import {
   ShelfConfig,
   ShelfSurfacePosition,
 } from "@vst/vocabulary-types";
-import { isShelfSurfacePosition } from "@vst/utils";
+import { isShelfSurfacePosition } from "@vst/vocabulary-logic";
 
 /**
  * A lightweight, dependency-free mock implementation of the ICoreProcessor.

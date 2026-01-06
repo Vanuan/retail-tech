@@ -10,7 +10,7 @@ import {
   Vector3,
   IAssetProvider as IBrowserAssetProvider,
 } from "@vst/vocabulary-types";
-import { isShelfSurfacePosition } from "@vst/utils";
+import { isShelfSurfacePosition } from "@vst/vocabulary-logic";
 import { LabelUtils } from "./shared/label-utils";
 import { ShopperCameraInput } from "./shared/shopper-camera-input";
 

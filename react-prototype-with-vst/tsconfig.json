@@ -24,7 +24,7 @@
       "@vst/fluent": ["./vst-library/fluent/src/index.ts"],
       "@vst/vocabulary-types": ["./vst-library/vocabulary-types/index.ts"],
       "@vst/vocabulary-actions": ["./vst-library/vocabulary-actions/index.ts"],
-      "@vst/utils": ["./lib/vst/utils/index.ts"],
+      "@vst/vocabulary-logic": ["./vst-library/vocabulary-logic/index.ts"],
       "@vst/placement-models": [
         "./lib/vst/implementations/placement-models/interface.ts",
       ],

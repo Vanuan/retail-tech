@@ -19,7 +19,7 @@ import {
   IPlacementModel,
   PlacementModelProperties,
 } from "@vst/placement-models";
-import { isShelfSurfacePosition } from "@vst/utils";
+import { isShelfSurfacePosition } from "@vst/vocabulary-logic";
 
 export class ShelfSurfacePlacementModel implements IPlacementModel {
   public readonly id = "shelf-surface";

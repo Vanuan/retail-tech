@@ -9,7 +9,7 @@ import {
   IAssetProvider as IBrowserAssetProvider,
   Pixels,
 } from "@vst/vocabulary-types";
-import { isShelfSurfacePosition } from "@vst/utils";
+import { isShelfSurfacePosition } from "@vst/vocabulary-logic";
 import { Projection } from "../projection";
 import { LabelUtils } from "./shared/label-utils";
 

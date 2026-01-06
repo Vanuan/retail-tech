@@ -24,7 +24,7 @@ import {
 } from "@vst/vocabulary-types";
 
 export type { RenderInstance };
-import { isShelfSurfacePosition, createFacingConfig } from "@vst/utils";
+import { isShelfSurfacePosition, createFacingConfig } from "@vst/vocabulary-logic";
 import {
   usePlanogramSession,
   PlanogramSnapshot,

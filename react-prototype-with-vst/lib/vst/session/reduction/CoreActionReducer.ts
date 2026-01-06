@@ -8,7 +8,7 @@ import {
   ShelfSurfacePosition,
   ShelfConfig,
 } from "@vst/vocabulary-types";
-import { isShelfSurfacePosition } from "@vst/utils";
+import { isShelfSurfacePosition } from "@vst/vocabulary-logic";
 import { PlanogramAction } from "../types/actions";
 import { IActionReducer } from "../interfaces/IActionReducer";
 

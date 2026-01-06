@@ -26,7 +26,7 @@ import {
   SemanticPosition,
   ShelfSurfacePosition,
 } from "@vst/vocabulary-types";
-import { isShelfSurfacePosition, createFacingConfig } from "@vst/utils";
+import { isShelfSurfacePosition, createFacingConfig } from "@vst/vocabulary-logic";
 import { placementRegistry } from "../placement-models/registry";
 
 /**

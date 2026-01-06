@@ -14,7 +14,7 @@ import {
   ShelfConfig,
   IVstRenderer,
 } from "@vst/vocabulary-types";
-import { createFacingConfig } from "@vst/utils";
+import { createFacingConfig } from "@vst/vocabulary-logic";
 import { PlanogramActions } from "@vst/vocabulary-actions";
 import { placementRegistry } from "@/lib/vst/implementations";
 import { Canvas2DRenderer } from "@/lib/vst/implementations/renderers/canvas-2d";
