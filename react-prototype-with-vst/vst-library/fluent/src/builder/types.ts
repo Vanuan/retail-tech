@@ -1,3 +1,4 @@
+import { IRetailLogic } from "@vst/retail-logic";
 import {
   ICoreProcessor,
   PlanogramConfig,
@@ -7,6 +8,7 @@ import {
 
 export interface PlanogramBuilderOptions {
   processor: ICoreProcessor;
+  retailLogic: IRetailLogic;
   strict?: boolean;
 }
 

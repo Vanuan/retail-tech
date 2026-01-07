@@ -32,7 +32,7 @@ import {
   PlanogramAction,
 } from "@vst/session";
 
-import { dal } from "./vst/implementations/repositories/data-access";
+import { dal } from "@vst/data-access";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
 

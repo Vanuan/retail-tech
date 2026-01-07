@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES6",
+    "module": "CommonJS",
+    "declaration": true,
+    "outDir": "./dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@vst/vocabulary-types": ["../vocabulary-types/index.ts"],
+      "@vst/vocabulary-logic": ["../vocabulary-logic/index.ts"],
+      "@vst/placement-core": ["../placement-core/index.ts"],
+      "@vst/placement-models": ["../placement-models/index.ts"]
+    }
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

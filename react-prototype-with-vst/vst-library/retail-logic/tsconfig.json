@@ -15,9 +15,10 @@
     "paths": {
       "@vst/vocabulary-types": ["../vocabulary-types/index.ts"],
       "@vst/vocabulary-actions": ["../vocabulary-actions/index.ts"],
-      "@vst/retail-logic": ["../retail-logic/src/index.ts"],
-    },
+      "@vst/vocabulary-logic": ["../vocabulary-logic/index.ts"],
+      "@vst/placement-models": ["../placement-models/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"],
+  "exclude": ["node_modules", "dist"]
 }

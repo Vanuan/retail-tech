@@ -15,7 +15,7 @@ import {
   ProductMetadata,
 } from "@vst/vocabulary-types";
 import { CoreProcessor } from "@/lib/vst/implementations/core/processor";
-import { dal } from "@/lib/vst/implementations/repositories/data-access";
+import { dal } from "@vst/data-access";
 
 interface PlanogramDataContextType {
   // Data State

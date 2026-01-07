@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { usePlanogramData } from "@/lib/planogram-data-context";
 import { usePlanogram } from "@/lib/planogram-editor-context";
 import { TescoRenderer } from "@/lib/vst/implementations/renderers/tesco-renderer";
-import { dal } from "@/lib/vst/implementations/repositories/data-access";
+import { dal } from "@vst/data-access";
 import { IAssetProvider as IBrowserAssetProvider } from "@vst/vocabulary-types";
 import { RenderProjection } from "@vst/vocabulary-types";
 import { RenderInstance } from "@vst/vocabulary-types";

@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { dal } from "@/lib/vst/implementations/repositories/data-access";
+import { dal } from "@vst/data-access";
 import { PlanogramConfig } from "@vst/vocabulary-types";
 import { PlanogramReadOnlyPreview } from "@/components/publisher/planogram-readonly-preview";
 

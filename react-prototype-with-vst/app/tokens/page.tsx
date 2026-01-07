@@ -33,7 +33,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { dal } from "@/lib/vst/implementations/repositories/data-access";
+import { dal } from "@vst/data-access";
 import { PlanogramConfig } from "@vst/vocabulary-types";
 
 // Mock token data generator using real planograms

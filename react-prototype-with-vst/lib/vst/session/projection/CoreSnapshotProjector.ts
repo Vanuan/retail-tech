@@ -53,6 +53,7 @@ export class CoreSnapshotProjector implements ISnapshotProjector {
 
     // 4. Package the final, enriched snapshot object.
     return {
+      ...processed,
       config,
       renderInstances: processed.renderInstances,
       validation,

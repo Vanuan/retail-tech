@@ -25,9 +25,10 @@
       "@vst/vocabulary-types": ["./vst-library/vocabulary-types/index.ts"],
       "@vst/vocabulary-actions": ["./vst-library/vocabulary-actions/index.ts"],
       "@vst/vocabulary-logic": ["./vst-library/vocabulary-logic/index.ts"],
-      "@vst/placement-models": [
-        "./lib/vst/implementations/placement-models/interface.ts",
-      ],
+      "@vst/placement-core": ["./vst-library/placement-core/index.ts"],
+      "@vst/placement-models": ["./vst-library/placement-models/index.ts"],
+      "@vst/data-access": ["./vst-library/data-access/index.ts"],
+      "@vst/retail-logic": ["./vst-library/retail-logic/src/index.ts"],
     },
   },
   "include": [

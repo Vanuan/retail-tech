@@ -37,6 +37,30 @@ export interface ICoreProcessor {
   ): IPlanogramSnapshot;
 
   /**
+   * Applies a sequence of actions to a configuration.
+   * Pure function: Returns a new configuration object.
+   */
+  applyActions(
+    base: PlanogramConfig,
+    actions: readonly PlanogramAction[],
+  ): PlanogramConfig;
+
+  /**
+   * Apply actions with validation.
+   * This is the "smart" version that checks each action before applying.
+   *
+   * @returns Applied config + validation results for each action
+   */
+  applyActionsWithValidation(
+    base: PlanogramConfig,
+    actions: readonly PlanogramAction[],
+    metadata: ReadonlyMap<string, ProductMetadata>,
+  ): {
+    config: PlanogramConfig;
+    results: ActionApplicationResult[];
+  };
+
+  /**
    * Calculates the best placement for a product based on business rules.
    * Pure intent service - does not modify state.
    */
@@ -80,4 +104,10 @@ export interface ValidationContext {
   readonly config: PlanogramConfig;
   readonly metadata: ReadonlyMap<string, ProductMetadata>;
   readonly actions?: readonly PlanogramAction[];
+}
+
+export interface ActionApplicationResult {
+  action: PlanogramAction;
+  applied: boolean;
+  validation: ValidationResult;
 }

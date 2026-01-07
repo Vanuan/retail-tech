@@ -1,11 +1,19 @@
 import {
+  ActionApplicationResult,
   CoreProcessInput,
   ICoreProcessor,
+  IPlanogramSnapshot,
+  PlacementSuggestion,
+  PlacementSuggestionInput,
+  PlanogramAction,
+  PlanogramConfig,
   ProcessedPlanogram,
   ProductMetadata,
   RenderInstance,
   ShelfConfig,
   ShelfSurfacePosition,
+  ValidationContext,
+  ValidationResult,
 } from "@vst/vocabulary-types";
 import { isShelfSurfacePosition } from "@vst/vocabulary-logic";
 
@@ -20,6 +28,101 @@ import { isShelfSurfacePosition } from "@vst/vocabulary-logic";
 export class MockCoreProcessor implements ICoreProcessor {
   constructor(private metadata: Map<string, ProductMetadata>) {}
 
+  public project(
+    config: PlanogramConfig,
+    actions: readonly PlanogramAction[],
+    metadata: ReadonlyMap<string, ProductMetadata>,
+  ): IPlanogramSnapshot {
+    const derivedConfig = this.applyActions(config, actions);
+    const processed = this.process({ config: derivedConfig, metadata });
+    return {
+      ...processed,
+      config: derivedConfig,
+    };
+  }
+
+  public applyActions(
+    base: PlanogramConfig,
+    actions: readonly PlanogramAction[],
+  ): PlanogramConfig {
+    return actions.reduce((config, action) => {
+      switch (action.type) {
+        case "PRODUCT_MOVE":
+          return {
+            ...config,
+            products: config.products.map((p) =>
+              p.id === action.productId
+                ? { ...p, placement: { ...p.placement, position: action.to } }
+                : p,
+            ),
+          };
+        case "PRODUCT_ADD":
+          return {
+            ...config,
+            products: [...config.products, action.product],
+          };
+        case "PRODUCT_REMOVE":
+          return {
+            ...config,
+            products: config.products.filter((p) => p.id !== action.productId),
+          };
+        case "BATCH":
+          return this.applyActions(config, action.actions);
+        default:
+          return config;
+      }
+    }, base);
+  }
+
+  public applyActionsWithValidation(
+    base: PlanogramConfig,
+    actions: readonly PlanogramAction[],
+    metadata: ReadonlyMap<string, ProductMetadata>,
+  ): {
+    config: PlanogramConfig;
+    results: ActionApplicationResult[];
+  } {
+    let current = base;
+    const results: ActionApplicationResult[] = [];
+
+    for (const action of actions) {
+      const validation = this.validateIntent(action, {
+        config: current,
+        metadata,
+      });
+
+      if (validation.valid) {
+        current = this.applyActions(current, [action]);
+      }
+
+      results.push({
+        action,
+        applied: validation.valid,
+        validation,
+      });
+    }
+
+    return { config: current, results };
+  }
+
+  public suggestPlacement(
+    input: PlacementSuggestionInput,
+  ): PlacementSuggestion | null {
+    return null;
+  }
+
+  public validateIntent(
+    action: PlanogramAction,
+    context: ValidationContext,
+  ): ValidationResult {
+    return {
+      valid: true,
+      canRender: true,
+      errors: [],
+      warnings: [],
+    };
+  }
+
   /**
    * Processes a planogram configuration into a set of renderable instances.
    * @param input The planogram configuration and associated metadata.
@@ -31,7 +134,7 @@ export class MockCoreProcessor implements ICoreProcessor {
     const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
 
     for (const p of config.products) {
-      const meta = this.metadata.get(p.sku);
+      const meta = input.metadata.get(p.sku) || this.metadata.get(p.sku);
       const position = p.placement.position;
       const isShelf = isShelfSurfacePosition(position);
       const facings = p.placement.facings?.horizontal || 1;
@@ -57,8 +160,7 @@ export class MockCoreProcessor implements ICoreProcessor {
           metadata: meta || ({} as any),
           worldPosition: {
             x:
-              (isShelf ? (position as ShelfSurfacePosition).x : 0) +
-              f * pWidth,
+              (isShelf ? (position as ShelfSurfacePosition).x : 0) + f * pWidth,
             y: worldY,
             z: isShelf ? (position as ShelfSurfacePosition).depth || 0 : 0,
           },

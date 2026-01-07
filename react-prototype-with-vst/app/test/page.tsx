@@ -15,7 +15,7 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
-import { dal } from "@/lib/vst/implementations/repositories/data-access";
+import { dal } from "@vst/data-access";
 import {
   PlanogramConfig,
   ProductMetadata,

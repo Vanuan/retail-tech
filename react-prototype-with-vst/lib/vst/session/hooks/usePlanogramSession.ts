@@ -8,8 +8,8 @@ import {
   IPlanogramSession,
   PlacementSuggestionInput,
 } from "@vst/vocabulary-types";
+import { RetailLogic, IRetailLogic } from "@vst/retail-logic";
 import { SessionStore } from "../store/SessionStore";
-import { CoreActionReducer } from "../reduction/CoreActionReducer";
 import { CoreSnapshotProjector } from "../projection/CoreSnapshotProjector";
 import { PlanogramReducer } from "../facade/PlanogramReducer";
 import { CoreProcessor } from "../../implementations/core/processor";
@@ -23,6 +23,7 @@ export interface UsePlanogramSessionOptions {
    * supplying a mock processor in development environments.
    */
   processor?: ICoreProcessor;
+  retailLogic?: IRetailLogic;
 }
 
 export interface UsePlanogramSessionResult {
@@ -64,14 +65,17 @@ export function usePlanogramSession(
     return options?.processor || new CoreProcessor(dal);
   }, [dal, options?.processor]);
 
+  const retailLogic = useMemo(() => {
+    return options?.retailLogic || new RetailLogic();
+  }, [options?.retailLogic]);
+
   // 2. Memoize the reducer/projector facade.
   const reducer = useMemo(() => {
     if (!metadata) return null;
 
-    const actionReducer = new CoreActionReducer(metadata);
     const snapshotProjector = new CoreSnapshotProjector(processor, metadata);
 
-    return new PlanogramReducer(actionReducer, snapshotProjector);
+    return new PlanogramReducer(processor, snapshotProjector, metadata);
   }, [processor, metadata]);
 
   // 3. Manage the SessionStore instance's lifecycle.
@@ -100,14 +104,14 @@ export function usePlanogramSession(
       snapshot: sessionResult.snapshot,
 
       validate: (action: PlanogramAction) => {
-        return processor.validateIntent(action, {
+        return retailLogic.validateIntent(action, {
           config: sessionResult.snapshot!.config,
           metadata,
         });
       },
 
       stage: (action: PlanogramAction) => {
-        const validation = processor.validateIntent(action, {
+        const validation = retailLogic.validateIntent(action, {
           config: sessionResult.snapshot!.config,
           metadata,
         });
@@ -119,7 +123,7 @@ export function usePlanogramSession(
       },
 
       stageTransient: (action: PlanogramAction) => {
-        const validation = processor.validateIntent(action, {
+        const validation = retailLogic.validateIntent(action, {
           config: sessionResult.snapshot!.config,
           metadata,
         });
@@ -141,14 +145,14 @@ export function usePlanogramSession(
       suggestPlacement: (
         input: Omit<PlacementSuggestionInput, "config" | "metadata">,
       ) => {
-        return processor.suggestPlacement({
+        return retailLogic.suggestPlacement({
           ...input,
           config: sessionResult.snapshot!.config,
           metadata,
         });
       },
     };
-  }, [store, processor, metadata, sessionResult.snapshot]);
+  }, [store, processor, retailLogic, metadata, sessionResult.snapshot]);
 
   // 6. Return the combined result object.
   return {

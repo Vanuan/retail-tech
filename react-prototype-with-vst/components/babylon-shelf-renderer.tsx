@@ -5,7 +5,7 @@ import * as BABYLON from "@babylonjs/core";
 import { usePlanogramData } from "@/lib/planogram-data-context";
 import { PlanogramEditorContext } from "@/lib/planogram-editor-context";
 import { BabylonRenderer } from "@/lib/vst/implementations/renderers/babylon-renderer";
-import { dal } from "@/lib/vst/implementations/repositories/data-access";
+import { dal } from "@vst/data-access";
 import {
   PlanogramConfig,
   RenderInstance,

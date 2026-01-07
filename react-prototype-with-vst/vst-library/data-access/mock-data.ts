@@ -5,10 +5,16 @@ import {
   ShelfIndex,
   PlanogramConfig,
   SourceProduct,
-  ShelfSurfacePosition,
 } from "@vst/vocabulary-types";
-import { createFacingConfig } from "@vst/vocabulary-logic";
+import {
+  createFacingConfig,
+  createShelfSurfacePosition,
+} from "@vst/vocabulary-logic";
 
+/**
+ * PRODUCT CATALOG
+ * Master metadata for all products available in the system.
+ */
 export const PRODUCT_CATALOG: Record<string, ProductMetadata> = {
   "COKE-001": {
     id: "meta-coke",
@@ -126,6 +132,9 @@ export const PRODUCT_CATALOG: Record<string, ProductMetadata> = {
   },
 };
 
+/**
+ * DEFAULT FIXTURE CONFIGURATION
+ */
 export const DEFAULT_FIXTURE: FixtureConfig = {
   type: "shelf",
   placementModel: "shelf-surface",
@@ -165,17 +174,20 @@ export const DEFAULT_FIXTURE: FixtureConfig = {
   },
 };
 
+/**
+ * MOCK PRODUCTS
+ * Instances placed within a planogram.
+ */
 export const MOCK_PRODUCTS: SourceProduct[] = [
   {
     id: "inst-1",
     sku: "COKE-001",
     placement: {
-      position: {
-        model: "shelf-surface",
+      position: createShelfSurfacePosition({
         x: 50 as Millimeters,
         shelfIndex: 0 as ShelfIndex,
         depth: 0,
-      } as ShelfSurfacePosition,
+      }),
       facings: createFacingConfig(3, 1),
     },
     pricing: { unitPrice: 1.5 },
@@ -184,12 +196,11 @@ export const MOCK_PRODUCTS: SourceProduct[] = [
     id: "inst-2",
     sku: "PEPSI-001",
     placement: {
-      position: {
-        model: "shelf-surface",
+      position: createShelfSurfacePosition({
         x: 250 as Millimeters,
         shelfIndex: 0 as ShelfIndex,
         depth: 0,
-      } as ShelfSurfacePosition,
+      }),
       facings: createFacingConfig(2, 1),
     },
     pricing: { unitPrice: 1.45 },
@@ -198,12 +209,11 @@ export const MOCK_PRODUCTS: SourceProduct[] = [
     id: "inst-3",
     sku: "WATER-001",
     placement: {
-      position: {
-        model: "shelf-surface",
+      position: createShelfSurfacePosition({
         x: 50 as Millimeters,
         shelfIndex: 1 as ShelfIndex,
         depth: 0,
-      } as ShelfSurfacePosition,
+      }),
       facings: createFacingConfig(4, 1),
     },
     pricing: { unitPrice: 1.0 },
@@ -212,18 +222,21 @@ export const MOCK_PRODUCTS: SourceProduct[] = [
     id: "inst-4",
     sku: "CHIPS-001",
     placement: {
-      position: {
-        model: "shelf-surface",
+      position: createShelfSurfacePosition({
         x: 50 as Millimeters,
         shelfIndex: 2 as ShelfIndex,
         depth: 0,
-      } as ShelfSurfacePosition,
+      }),
       facings: createFacingConfig(2, 1),
     },
     pricing: { unitPrice: 2.2 },
   },
 ];
 
+/**
+ * MOCK PLANOGRAM
+ * A complete planogram configuration.
+ */
 export const MOCK_PLANOGRAM: PlanogramConfig = {
   id: "mock-1",
   name: "Mock Planogram",

@@ -35,12 +35,12 @@ export { HistoryStack } from "./store/HistoryStack";
 // ============================================================================
 
 // --- Interfaces ---
-export type { IActionReducer } from "./interfaces/IActionReducer";
+
 export type { ISnapshotProjector } from "./interfaces/ISnapshotProjector";
 export type { IPlanogramReducer } from "./interfaces/IPlanogramReducer";
 
 // --- Implementations ---
-export { CoreActionReducer } from "./reduction/CoreActionReducer";
+
 export { CoreSnapshotProjector } from "./projection/CoreSnapshotProjector";
 export { PlanogramReducer } from "./facade/PlanogramReducer";
 

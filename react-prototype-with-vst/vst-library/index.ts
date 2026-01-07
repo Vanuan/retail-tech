@@ -33,11 +33,6 @@ export * from "@vst/placement-core";
 export * from "@vst/core-processing";
 
 // ============================================================================
-// DATA ACCESS LAYER - Repositories & Implementation
-// ============================================================================
-export * from "./data-access";
-
-// ============================================================================
 // SYSTEM FACADE - Orchestration
 // ============================================================================
 export { CompleteSystem } from "./CompleteSystem";

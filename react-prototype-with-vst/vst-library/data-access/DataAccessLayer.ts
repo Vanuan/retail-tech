@@ -8,12 +8,13 @@ import {
   IAssetProvider,
   ProductMetadata,
 } from "@vst/vocabulary-types";
-import { IPlacementModelRegistry } from "../placement-models/registry-interface";
-import { BrowserAssetProvider } from "./browser-asset-provider";
-import { placementRegistry } from "../placement-models/registry";
-import { ProductRepository } from "./product-repository";
-import { FixtureRepository } from "./fixture-repository";
-import { PlanogramRepository } from "./planogram-repository";
+import { IPlacementModelRegistry } from "@vst/placement-core";
+import { placementRegistry } from "@vst/placement-models";
+import { BrowserAssetProvider } from "./BrowserAssetProvider";
+import { AssetProvider } from "./AssetProvider";
+import { ProductRepository } from "./ProductRepository";
+import { FixtureRepository } from "./FixtureRepository";
+import { PlanogramRepository } from "./PlanogramRepository";
 
 /**
  * Unified Data Access Layer implementation
@@ -25,8 +26,15 @@ export class DataAccessLayer implements IDataAccessLayer {
   public readonly planograms: PlanogramRepository;
   public readonly placementModels: IPlacementModelRegistry;
 
-  constructor() {
-    this.assets = new BrowserAssetProvider();
+  constructor(options: { config?: { cdnBaseUrl: string } } = {}) {
+    if (options.config?.cdnBaseUrl) {
+      this.assets = new AssetProvider({
+        cdnBaseUrl: options.config.cdnBaseUrl,
+      });
+    } else {
+      this.assets = new BrowserAssetProvider();
+    }
+
     this.products = new ProductRepository();
     this.fixtures = new FixtureRepository();
     this.planograms = new PlanogramRepository();

@@ -22,7 +22,7 @@ import { v4 as uuidv4 } from "uuid";
  * PlanogramBuilder
  *
  * A headless, deterministic, fluent API for expressing retail intent.
- * It delegates all "physics" (positioning, validation, projection) to ICoreProcessor.
+ * It delegates "physics" (positioning, validation) to IRetailLogic and projection to ICoreProcessor.
  */
 export class PlanogramBuilder {
   private actions: PlanogramAction[] = [];
@@ -119,7 +119,7 @@ export class PlanogramBuilder {
   validate(): ValidationResult {
     // Note: CoreProcessor's validateIntent currently takes a single action.
     // We wrap our sequence in a BATCH for validation.
-    return this.options.processor.validateIntent(
+    return this.options.retailLogic.validateIntent(
       PlanogramActions.batch(this.actions),
       {
         config: this.config,
@@ -136,7 +136,7 @@ export class PlanogramBuilder {
     sku: string;
     preferredShelf?: ShelfIndex;
   }): PlacementSuggestion | null {
-    return this.options.processor.suggestPlacement({
+    return this.options.retailLogic.suggestPlacement({
       ...input,
       config: this.config,
       metadata: this.metadata,
@@ -187,7 +187,7 @@ export class PlanogramBuilder {
    */
   record(action: PlanogramAction): void {
     if (this.options.strict) {
-      const validation = this.options.processor.validateIntent(action, {
+      const validation = this.options.retailLogic.validateIntent(action, {
         config: this.config, // Note: For true strict sequential validation, we might need a sliding context
         metadata: this.metadata,
       });

@@ -17,11 +17,23 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@vst/vocabulary-types": ["vocabulary-types/index.ts"],
-      "@vst/vocabulary-logic": ["vocabulary-logic/index.ts"],
+      "@vst/vocabulary-types": [
+        "../react-prototype-with-vst/vst-library/vocabulary-types/index.ts",
+      ],
+      "@vst/vocabulary-logic": [
+        "../react-prototype-with-vst/vst-library/vocabulary-logic/index.ts",
+      ],
       "@vst/session-types": ["session-types/index.ts"],
-      "@vst/placement-core": ["placement-core/index.ts"],
+      "@vst/placement-core": [
+        "../react-prototype-with-vst/vst-library/placement-core/index.ts",
+      ],
+      "@vst/placement-models": [
+        "../react-prototype-with-vst/vst-library/placement-models/index.ts",
+      ],
       "@vst/core-processing": ["core-processing/index.ts"],
+      "@vst/data-access": [
+        "../react-prototype-with-vst/vst-library/data-access/index.ts",
+      ],
       "@vst/session": ["session/index.ts"],
     },
   },

@@ -12,9 +12,10 @@ import {
   ISessionManager,
 } from "@vst/session-types";
 import { IPlacementModelRegistry } from "@vst/placement-core";
+import { PlacementModelRegistry } from "@vst/placement-models";
+import { DataAccessLayer } from "@vst/data-access";
 import { CoreLayerProcessor } from "@vst/core-processing";
 import { SessionStore, CoreProjector } from "@vst/session";
-import { DataAccessLayer, PlacementModelRegistry } from "./data-access";
 import { AtlasBuilder } from "./atlas-processing";
 import { PublisherRenderer } from "./renderer/contexts/PublisherRenderer";
 import { VisualizerRenderer } from "./renderer/contexts/VisualizerRenderer";

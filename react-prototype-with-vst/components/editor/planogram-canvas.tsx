@@ -6,7 +6,7 @@ import {
   usePlanogram,
   type RenderInstance,
 } from "@/lib/planogram-editor-context";
-import { dal } from "@/lib/vst/implementations/repositories/data-access";
+import { dal } from "@vst/data-access";
 import {
   IAssetProvider as IBrowserAssetProvider,
   ShelfSurfacePosition,
@@ -16,7 +16,7 @@ import {
 } from "@vst/vocabulary-types";
 import { createFacingConfig } from "@vst/vocabulary-logic";
 import { PlanogramActions } from "@vst/vocabulary-actions";
-import { placementRegistry } from "@/lib/vst/implementations";
+import { placementRegistry } from "@vst/placement-models";
 import { Canvas2DRenderer } from "@/lib/vst/implementations/renderers/canvas-2d";
 import { TescoRenderer } from "@/lib/vst/implementations/renderers/tesco-renderer";
 import { BabylonRenderer } from "@/lib/vst/implementations/renderers/babylon-renderer";

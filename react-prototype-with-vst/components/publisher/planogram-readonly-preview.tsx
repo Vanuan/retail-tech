@@ -7,7 +7,7 @@ import {
   IAssetProvider as IBrowserAssetProvider,
 } from "@vst/vocabulary-types";
 import { TescoRenderer } from "@/lib/vst/implementations/renderers/tesco-renderer";
-import { dal } from "@/lib/vst/implementations/repositories/data-access";
+import { dal } from "@vst/data-access";
 import {
   PlanogramDataProvider,
   usePlanogramData,

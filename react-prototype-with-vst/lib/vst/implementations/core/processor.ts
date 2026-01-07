@@ -7,27 +7,24 @@ import {
   FixtureConfig,
   ZIndex,
   Millimeters,
-  DepthLevel,
   DepthCategory,
   IDataAccessLayer,
   ICoreProcessor,
   CoreProcessInput,
   IPlanogramSnapshot,
   PlanogramAction,
+  ActionApplicationResult,
   PlacementSuggestionInput,
   PlacementSuggestion,
   ValidationContext,
   ValidationResult,
-  ValidationError,
-  ValidationWarning,
-  ValidationErrorCode,
-  ShelfIndex,
-  ShelfConfig,
-  SemanticPosition,
-  ShelfSurfacePosition,
 } from "@vst/vocabulary-types";
-import { isShelfSurfacePosition, createFacingConfig } from "@vst/vocabulary-logic";
-import { placementRegistry } from "../placement-models/registry";
+import {
+  isShelfSurfacePosition,
+  createFacingConfig,
+} from "@vst/vocabulary-logic";
+import { placementRegistry } from "@vst/placement-models";
+import { RetailLogic, IRetailLogic, ActionApplier } from "@vst/retail-logic";
 
 /**
  * CoreProcessor
@@ -41,6 +38,8 @@ import { placementRegistry } from "../placement-models/registry";
  * 3. Placement Suggestions (Where should this go?)
  */
 export class CoreProcessor implements ICoreProcessor {
+  private retailLogic = new RetailLogic();
+
   constructor(private dal: IDataAccessLayer) {}
 
   /**
@@ -88,100 +87,18 @@ export class CoreProcessor implements ICoreProcessor {
   suggestPlacement(
     input: PlacementSuggestionInput,
   ): PlacementSuggestion | null {
-    const { sku, preferredShelf, constraints, metadata, actions } = input;
-    const config = actions
-      ? this.applyActions(input.config, actions)
+    const config = input.actions
+      ? this.applyActions(input.config, input.actions)
       : input.config;
-    const meta = metadata.get(sku);
 
-    if (!meta) {
-      console.error(`Cannot suggest placement: Metadata not found for ${sku}`);
-      return null;
-    }
-
-    const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
-    const allIndices = shelves.map((s) => s.index as ShelfIndex);
-
-    if (allIndices.length === 0) return null;
-
-    // Determine shelf check order
-    let checkOrder: ShelfIndex[] = [];
-
-    if (constraints?.allowedShelves) {
-      checkOrder = constraints.allowedShelves.filter((i) =>
-        allIndices.includes(i),
-      );
-    } else {
-      const targetIndex =
-        preferredShelf !== undefined && allIndices.includes(preferredShelf)
-          ? preferredShelf
-          : allIndices[0];
-
-      checkOrder = [
-        targetIndex as ShelfIndex,
-        ...allIndices.filter((i) => i !== targetIndex),
-      ];
-    }
-
-    // Scan shelves for space (prefer front rows across all allowed shelves)
-    for (const depth of [0, 1, 2, 3] as const) {
-      for (const shelfIndex of checkOrder) {
-        const shelfWidth = config.fixture.dimensions.width;
-        const productWidth = meta.dimensions.physical.width;
-
-        // Get all products already on this shelf and depth
-        const existingProducts = config.products
-          .filter((p) => {
-            const pos = p.placement.position;
-            return (
-              isShelfSurfacePosition(pos) &&
-              pos.shelfIndex === shelfIndex &&
-              (pos.depth || 0) === depth
-            );
-          })
-          .map((p) => {
-            const pMeta = metadata.get(p.sku);
-            const pW =
-              (pMeta?.dimensions.physical.width || 0) *
-              (p.placement.facings?.horizontal || 1);
-            return {
-              x: (p.placement.position as ShelfSurfacePosition).x,
-              width: pW,
-            };
-          })
-          .sort((a, b) => a.x - b.x);
-
-        // Candidate positions: Start of shelf, and after every existing product
-        const candidates = [0, ...existingProducts.map((p) => p.x + p.width)];
-
-        for (const candidateX of candidates) {
-          if (candidateX + productWidth > shelfWidth) continue;
-
-          // Check for collision at this candidate position
-          const hasCollision = existingProducts.some((p) => {
-            return (
-              candidateX < p.x + p.width - 0.5 &&
-              candidateX + productWidth > p.x + 0.5
-            );
-          });
-
-          if (!hasCollision) {
-            const suggested = {
-              position: {
-                model: "shelf-surface",
-                shelfIndex,
-                x: candidateX as Millimeters,
-                depth: depth as DepthLevel,
-              } as ShelfSurfacePosition,
-            };
-            return suggested;
-          }
-        }
-      }
-    }
-
-    // No space found on any allowed shelf
-    return null;
+    return this.retailLogic.suggestPlacement({
+      sku: input.sku,
+      preferredShelf: input.preferredShelf,
+      constraints: input.constraints,
+      metadata: input.metadata as Map<string, ProductMetadata>,
+      config,
+      actions: [], // Actions are already applied to config
+    });
   }
 
   /**
@@ -191,112 +108,14 @@ export class CoreProcessor implements ICoreProcessor {
     action: PlanogramAction,
     context: ValidationContext,
   ): ValidationResult {
-    const { metadata, actions } = context;
-    const config = actions
-      ? this.applyActions(context.config, actions)
+    const config = context.actions
+      ? this.applyActions(context.config, context.actions)
       : context.config;
 
-    switch (action.type) {
-      case "PRODUCT_ADD":
-        return this.validatePlacement(
-          config,
-          metadata,
-          action.product.sku,
-          action.product.placement.position,
-          action.product.placement.facings?.horizontal || 1,
-          action.product.id,
-        );
-
-      case "PRODUCT_MOVE": {
-        const product = config.products.find((p) => p.id === action.productId);
-        if (!product) {
-          return {
-            valid: false,
-            canRender: false,
-            errors: [
-              {
-                code: "PRODUCT_NOT_FOUND" as ValidationErrorCode,
-                message: "Product not found",
-              },
-            ],
-            warnings: [],
-          };
-        }
-        return this.validatePlacement(
-          config,
-          metadata,
-          product.sku,
-          action.to,
-          product.placement.facings?.horizontal || 1,
-          action.productId,
-        );
-      }
-
-      case "PRODUCT_UPDATE_FACINGS": {
-        const product = config.products.find((p) => p.id === action.productId);
-        if (!product) {
-          return {
-            valid: false,
-            canRender: false,
-            errors: [
-              {
-                code: "PRODUCT_NOT_FOUND" as ValidationErrorCode,
-                message: "Product not found",
-              },
-            ],
-            warnings: [],
-          };
-        }
-        return this.validatePlacement(
-          config,
-          metadata,
-          product.sku,
-          product.placement.position,
-          action.facings.horizontal,
-          action.productId,
-        );
-      }
-
-      case "BATCH": {
-        let currentConfig = config;
-        let valid = true;
-        let canRender = true;
-        const errors: ValidationError[] = [];
-        const warnings: ValidationWarning[] = [];
-
-        for (const subAction of action.actions) {
-          const result = this.validateIntent(subAction, {
-            config: currentConfig,
-            metadata,
-          });
-
-          if (!result.valid) valid = false;
-          if (!result.canRender) canRender = false;
-          errors.push(...result.errors);
-          warnings.push(...result.warnings);
-
-          if (result.valid) {
-            currentConfig = this.reduceAction(currentConfig, subAction);
-          }
-        }
-
-        return {
-          valid,
-          canRender,
-          errors,
-          warnings,
-        };
-      }
-
-      // TODO: Implement validation for other actions
-      default:
-        return {
-          valid: true,
-          canRender: true,
-          errors: [],
-          warnings: [],
-        };
-    }
+    return this.retailLogic.validateIntent(action, {
+      config,
+      metadata: context.metadata as Map<string, ProductMetadata>,
+    });
   }
 
   /**
@@ -362,236 +181,54 @@ export class CoreProcessor implements ICoreProcessor {
   // ==========================================================================
 
   /**
-   * Applies a list of actions to a base configuration.
    * Pure function: Returns a new configuration object.
    */
-  private applyActions(
+  public applyActions(
     base: PlanogramConfig,
     actions: readonly PlanogramAction[],
   ): PlanogramConfig {
-    return actions.reduce(
-      (config, action) => this.reduceAction(config, action),
-      base,
-    );
+    return ActionApplier.applyActions(base, actions);
   }
 
-  private reduceAction(
-    config: PlanogramConfig,
-    action: PlanogramAction,
-  ): PlanogramConfig {
-    switch (action.type) {
-      case "PRODUCT_MOVE": {
-        return {
-          ...config,
-          products: config.products.map((p) =>
-            p.id === action.productId
-              ? { ...p, placement: { ...p.placement, position: action.to } }
-              : p,
-          ),
-        };
-      }
-      case "PRODUCT_ADD": {
-        return {
-          ...config,
-          products: [...config.products, action.product],
-        };
-      }
-      case "PRODUCT_REMOVE": {
-        return {
-          ...config,
-          products: config.products.filter((p) => p.id !== action.productId),
-        };
-      }
-      case "PRODUCT_UPDATE_FACINGS": {
-        return {
-          ...config,
-          products: config.products.map((p) =>
-            p.id === action.productId
-              ? {
-                  ...p,
-                  placement: { ...p.placement, facings: action.facings },
-                }
-              : p,
-          ),
-        };
-      }
-      case "SHELF_ADD": {
-        const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
-        return {
-          ...config,
-          fixture: {
-            ...config.fixture,
-            config: {
-              ...config.fixture.config,
-              shelves: [...shelves, action.shelf],
-            },
-          },
-        };
-      }
-      case "SHELF_REMOVE": {
-        const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
-        return {
-          ...config,
-          fixture: {
-            ...config.fixture,
-            config: {
-              ...config.fixture.config,
-              shelves: shelves.filter((s) => s.index !== action.index),
-            },
-          },
-        };
-      }
-      case "SHELF_UPDATE": {
-        const shelves = (config.fixture.config.shelves as ShelfConfig[]) || [];
-        return {
-          ...config,
-          fixture: {
-            ...config.fixture,
-            config: {
-              ...config.fixture.config,
-              shelves: shelves.map((s) =>
-                s.index === action.index ? { ...s, ...action.updates } : s,
-              ),
-            },
-          },
-        };
-      }
-      case "FIXTURE_UPDATE": {
-        const { config: updateConfig, ...updateOthers } = action.updates;
-        const resultFixture = {
-          ...config.fixture,
-          ...updateOthers,
-        };
-        if (updateConfig) {
-          resultFixture.config = {
-            ...config.fixture.config,
-            ...(updateConfig as Record<string, unknown>),
-          };
-        }
-        return {
-          ...config,
-          fixture: resultFixture,
-        };
-      }
-      case "BATCH": {
-        return action.actions.reduce(
-          (cfg, subAction) => this.reduceAction(cfg, subAction),
-          config,
-        );
-      }
-      default:
-        return config;
-    }
-  }
-
-  private getShelfSpaceUsed(
-    config: PlanogramConfig,
+  public applyActionsWithValidation(
+    base: PlanogramConfig,
+    actions: readonly PlanogramAction[],
     metadata: ReadonlyMap<string, ProductMetadata>,
-    shelfIndex: number,
-    depth: number = 0,
-  ): number {
-    let maxX = 0;
-    for (const p of config.products) {
-      const pos = p.placement.position;
-      if (
-        isShelfSurfacePosition(pos) &&
-        pos.shelfIndex === shelfIndex &&
-        (pos.depth || 0) === depth
-      ) {
-        const meta = metadata.get(p.sku);
-        if (meta) {
-          const w =
-            meta.dimensions.physical.width *
-            (p.placement.facings?.horizontal || 1);
-          maxX = Math.max(maxX, pos.x + w);
-        }
+  ): {
+    config: PlanogramConfig;
+    results: ActionApplicationResult[];
+  } {
+    let current = base;
+    const results: ActionApplicationResult[] = [];
+
+    for (const action of actions) {
+      // Validate before applying
+      const validation = this.validateIntent(action, {
+        config: current,
+        metadata,
+      });
+
+      if (!validation.valid) {
+        // Action is invalid - record error but continue with previous state
+        results.push({
+          action,
+          applied: false,
+          validation,
+        });
+        continue;
       }
-    }
-    return maxX;
-  }
 
-  private validatePlacement(
-    config: PlanogramConfig,
-    metadata: ReadonlyMap<string, ProductMetadata>,
-    sku: string,
-    position: SemanticPosition,
-    facings: number,
-    excludeId?: string,
-  ): ValidationResult {
-    // 1. Basic Bounds Check
-    if (!isShelfSurfacePosition(position)) {
-      return { valid: true, canRender: true, errors: [], warnings: [] };
+      // Apply action
+      current = ActionApplier.reduceAction(current, action);
+
+      results.push({
+        action,
+        applied: true,
+        validation,
+      });
     }
 
-    const meta = metadata.get(sku);
-    if (!meta) {
-      return {
-        valid: false,
-        canRender: false,
-        errors: [
-          {
-            code: "METADATA_MISSING" as ValidationErrorCode,
-            message: "Metadata not found",
-          },
-        ],
-        warnings: [],
-      };
-    }
-
-    const width = meta.dimensions.physical.width * facings;
-    const fixtureWidth = config.fixture.dimensions.width;
-
-    if (position.x < 0 || position.x + width > fixtureWidth) {
-      return {
-        valid: false,
-        canRender: true,
-        errors: [
-          {
-            code: "OUT_OF_BOUNDS" as ValidationErrorCode,
-            message: "Placement is out of bounds",
-          },
-        ],
-        warnings: [],
-      };
-    }
-
-    // 2. Collision Check
-    const collision = config.products.some((p) => {
-      if (p.id === excludeId) return false;
-      const pPos = p.placement.position;
-      if (
-        !isShelfSurfacePosition(pPos) ||
-        pPos.shelfIndex !== position.shelfIndex ||
-        (pPos.depth || 0) !== (position.depth || 0)
-      )
-        return false;
-
-      const pMeta = metadata.get(p.sku);
-      const pW =
-        (pMeta?.dimensions.physical.width || 0) *
-        (p.placement.facings?.horizontal || 1);
-
-      // AABB overlap test
-      return (
-        position.x < pPos.x + pW - 0.5 && position.x + width > pPos.x + 0.5
-      );
-    });
-
-    if (collision) {
-      return {
-        valid: false,
-        canRender: true,
-        errors: [
-          {
-            code: "COLLISION" as ValidationErrorCode,
-            message: "Product collides with another product",
-          },
-        ],
-        warnings: [],
-      };
-    }
-
-    return { valid: true, canRender: true, errors: [], warnings: [] };
+    return { config: current, results };
   }
 
   /**
